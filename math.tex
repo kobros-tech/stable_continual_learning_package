@@ -1,0 +1,154 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern,microtype,geometry,amsmath,amssymb,amsthm,mathtools,enumitem,booktabs}
+\usepackage[hidelinks]{hyperref}
+\geometry{margin=1in}
+\emergencystretch=3em
+\setlist{itemsep=2pt,topsep=4pt}
+\newtheorem{prop}{Proposition}
+\theoremstyle{remark}\newtheorem*{rem}{Remark}
+\newcommand{\R}{\mathbb{R}}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\nul}{null}
+\title{Mathematical specification: null-space continual learning\\ is \texttt{strategy\_b} with diagonal degree control}
+\author{}\date{}
+\begin{document}\maketitle
+
+\section{Scope}
+The package compares ordinary SGD with one constrained update, and exposes the diagonal
+degree-control mechanism of the \texttt{polynomial\_cl} \texttt{diagonal\_control} PR. The
+null-space update of the earlier package is the PR's \texttt{strategy\_b}: it is the same step
+at $\beta=0$ with a tolerance at machine level (Prop.~\ref{p:sb}). The two extra knobs the earlier
+package tuned, a spectral tolerance $\mathrm{tol}>0$ and a blend $\beta>0$, are \emph{relaxations}
+of \texttt{strategy\_b}; they are kept, named as such, and measured against it (\S\ref{s:emp}).
+
+\section{Model and diagonal rates}
+Features $\phi(x)\in\R^p$ are ordered by degree; $\deg(j)\in\{0,1,2,3\}$ is the degree of feature
+$j$. The classifier is $W\in\R^{p\times K}$ with logits $z(x)=\phi(x)^\top W$, linear in $W$. For a
+minibatch $B$ with softmax probabilities $p_W$ over the seen classes,
+$G=\tfrac1{|B|}\sum_{i\in B}\phi(x_i)\,(p_W(\cdot\mid x_i)-e_{y_i})^\top$.
+
+\paragraph{Diagonal rate.} Base rates $\eta\in\R^4_{\ge0}$ (at least one positive) and degree-control
+factors $m\in[0,1]^4$ give
+\[
+d_j=\eta_{\deg(j)}\,m_{\deg(j)},\qquad D=\diag(d),\qquad D^{1/2}=\diag(\sqrt{d_j}).
+\]
+Only the vector $d$ is formed. Conventions (all enforced and tested): $m=\mathbf 1$ gives $d_j=\eta_{\deg(j)}$
+exactly; $m_g=0$ freezes degree group $g$; $d=0$ is a valid no-op experience; $\eta$ and $m$ must be
+real (no booleans or complex values), finite, $\eta\ge0$, $m\in[0,1]$, and $m$ is never broadcast.
+The map $j\mapsto d_j$ is prefix-stable: a feature added by expansion takes the rate of its own degree
+and old features keep theirs. Expansion is $W\mapsto[W;0]$; because $\phi_{\text{old}}$ is a prefix of
+$\phi_{\text{new}}$, no logit changes.
+
+\section{Updates}
+Let $R\in\R^{m_R\times p}$ hold the features of the first $n_{\text{ref}}$ stored examples of every old
+class, $A=RD^{1/2}$ with singular values $\sigma_1\ge\sigma_2\ge\dots$ and SVD $A=U\Sigma V^\top$, and put
+$u=D^{1/2}G$. Let $N$ have orthonormal columns $v_i$, $i>k$, where $k=\#\{i:\sigma_i>\mathrm{tol}\cdot\max(\sigma_1,1)\}$
+(including all of $\nul A$), and $P=NN^\top$. Then
+\[
+\Delta W_{\text{SGD}}=-DG,\qquad
+\boxed{\Delta W=-D^{1/2}\big[P+\beta(I-P)\big]D^{1/2}G,\quad 0\le\beta\le1.}
+\]
+With no old classes (first experience) $\Delta W=\Delta W_{\text{SGD}}$. $N$ is rebuilt for every
+experience from the rate vector actually used; a rate mask applied after projecting breaks the
+constraint. Batches are class-balanced over current and replay data.
+
+\begin{prop}[\texttt{strategy\_b}]\label{p:sb}
+Let $\beta=0$ and $\mathrm{tol}\to0$ so that $P$ is the orthogonal projector onto $\nul(A)$. Then
+\begin{enumerate}[label=(\alph*)]
+\item $R\,\Delta W=0$. The logits of every reference input are unchanged on all seen columns after
+each step and, for fixed $R,D$, after the whole experience.
+\item Row $j$ of $\Delta W$ is zero whenever $d_j=0$.
+\item With $S=\{j:d_j>0\}$, $\Delta W$ is the unique minimiser of
+$\langle G,Z\rangle+\tfrac12\sum_{j\in S}\|Z_{j}\|^2/d_j$ over $Z$ with $Z_{S^c}=0$ and $RZ=0$.
+\item $\langle G,\Delta W\rangle=-\|Pu\|_F^2\le0$; the step stalls ($\Delta W=0$) iff $Pu=0$.
+\item The columns of $\Delta W$ lie in $\operatorname{range}(D^{1/2}N)$, of dimension
+$r=\rank(D^{1/2}N)=|S|-\rank(R_S)$, where $R_S$ keeps the columns of $R$ in $S$. $r$ never decreases when $S$
+grows, and $r=0$ (no learning) when $\rank(R_S)=|S|$.
+\item The step equals that of \texttt{polynomial\_cl}'s \texttt{strategy\_b} computed for the controlled rate $d$.
+\end{enumerate}
+\end{prop}
+\begin{proof}
+(a) $R\Delta W=-AN(N^\top u)=0$ since $AN=0$; logits are linear in $W$, and increments sum.
+(b) $D^{1/2}$ has a zero row. (c) Write $Z=D^{1/2}V$; then $RZ=AV$ and the objective is
+$\tfrac12\|V_S+u_S\|_F^2-\tfrac12\|u_S\|_F^2$ (rows off $S$ do not enter), minimised over columns of
+$V$ in $\nul A$ by $V=-Pu$ (projection theorem), unique on $S$. Since $\nul A=\nul A_S\oplus\R^{S^c}$ with
+$A_S=R_SD_S^{1/2}$, $P$ is block diagonal and $D^{1/2}Pu$ is supported on $S$.
+(d) $\langle G,D^{1/2}Pu\rangle=\langle u,Pu\rangle=\|Pu\|_F^2$ as $P^2=P=P^\top$.
+(e) $D^{1/2}$ annihilates $\R^{S^c}$ and is injective on $\nul A_S$; $\rank A_S=\rank R_S$ because $D_S^{1/2}$ is invertible.
+Adding a feature to $S$ adds one to $|S|$ and at most one to $\rank R_S$.
+(f) \texttt{fit\_task} applies $\sqrt{s}\,NN^\top\!\sqrt{s}\,g$ scaled by the base rate, with $s=d/\text{base}$ and $N$
+spanning $\nul(R\sqrt{s})=\nul A$. The two steps agree; numerically they differ by $2\!\times\!10^{-8}$
+(the PR works in float32), checked by \texttt{--check} when \texttt{polynomial\_cl} is importable.
+Both cut singular values at the same threshold $10^{-10}\max(\sigma_1,1)$ (the PR's convention, now also used by \texttt{null\_basis}), so they select the same space unless a singular value lies near it. In the uncontrolled benchmark runs the smallest $\sigma_1$ over all splits and experiences is $4.59>1$, so there the threshold equals $\mathrm{tol}\,\sigma_1$ and the reported numbers do not depend on the $\max(\cdot,1)$.
+\end{proof}
+
+\begin{prop}[relaxation]\label{p:rel}
+For any $\beta,\mathrm{tol}$, with $\tau=\mathrm{tol}\cdot\max(\sigma_1,1)$:
+\begin{enumerate}[label=(\alph*)]
+\item $\beta=1$ gives $\Delta W=-DG$ for every $\mathrm{tol}$ (ordinary rate-weighted SGD).
+\item $\langle G,\Delta W\rangle=-\big(\beta\|u\|_F^2+(1-\beta)\|Pu\|_F^2\big)\le0$, so every step is non-ascent; it is strict descent when $\beta>0$ and $u\neq0$.
+\item $\|R\,\Delta W+\beta\,RDG\|_F\le(1-\beta)\,\tau\,\|D^{1/2}G\|_F$: reference logits move by $\beta$ times
+their SGD change, up to a term proportional to the spectral tolerance. For $\mathrm{tol}$ at machine level this is $R\Delta W=-\beta RDG$.
+\end{enumerate}
+\end{prop}
+\begin{proof}
+(a),(b) $P+\beta(I-P)=\beta I+(1-\beta)P\succeq0$. (c) $R\Delta W=-\beta RD^{1/2}u-(1-\beta)AN N^\top u$,
+$RD^{1/2}u=RDG$, and $\|AN\|_2=\sigma_{k+1}\le\tau$.
+\end{proof}
+
+\begin{rem}
+A reference-logit guarantee is a statement about the stored reference inputs only: it does not control
+held-out accuracy, other stored examples, or later drift when $R$ or $D$ change. The basis is shared by
+every output column, so on the reference inputs the new classes' logits stay at their initial value~$0$.
+Spectral tolerance and $\beta$ trade this guarantee for plasticity.
+\end{rem}
+
+\section{Metrics and selection}
+Let $A_{t,j}$ be the accuracy on experience $j$ after experience $t$ (five experiences, $t,j=0..4$). Reported:
+final accuracy $\tfrac15\sum_jA_{4,j}$; forgetting $\tfrac14\sum_{j<4}\big(\max_{j\le t\le3}A_{t,j}-A_{4,j}\big)$;
+plasticity $\tfrac15\sum_tA_{t,t}$; newest $A_{4,4}$; old $\tfrac14\sum_{j<4}A_{4,j}$. Low forgetting is
+meaningful only beside plasticity.
+
+\paragraph{Degree-control selection (the PR's rule, validation data only).} Candidates are $m=\mathbf1$ and each
+single degree with one factor in $\{0,.05,.1,.25,.5,.75\}$. A candidate is feasible iff
+$\min_t\overline{A_{t,t}}\ge 0.5$, where the bar is the mean over seeds \emph{and} splits (the minimum is taken after averaging, not within each split). Among feasible
+candidates, take the Pareto front of (accuracy, forgetting), then the largest accuracy~$-$~forgetting;
+if none is feasible nothing is selected. Test results never enter selection.
+
+\section{Empirical status}\label{s:emp}
+All numbers come from \texttt{benchmark.py}: digits, $\eta=3$, 10 test splits $\times$ 2 seeds, pairwise
+95\% intervals; tuning on validation views only. Differences are first minus second method; s\_b is \texttt{strategy\_b}, ord.\ is ordinary SGD.
+\begin{center}\scriptsize\setlength{\tabcolsep}{3pt}\begin{tabular}{@{}lcccc@{}}\toprule
+ & \multicolumn{2}{c}{memory 60/class} & \multicolumn{2}{c}{memory 100/class}\\
+comparison & $\Delta$acc & $\Delta$forgetting & $\Delta$acc & $\Delta$forgetting\\\midrule
+exact s\_b $-$ ord. & $-0.048\,[-0.059,-0.037]$ & $-0.022$ & $-0.030\,[-0.040,-0.020]$ & $-0.015$\\
+relaxed $-$ ord. & $-0.003\,[-0.012,+0.006]$ & $-0.022\,[-0.034,-0.011]$ & $+0.003\,[-0.003,+0.009]$ & $-0.019\,[-0.026,-0.012]$\\
+relaxed $-$ exact s\_b & $+0.045\,[+0.031,+0.058]$ & $0.000$ & $+0.033\,[+0.021,+0.046]$ & $-0.004$\\\bottomrule
+\end{tabular}\end{center}
+Exact \texttt{strategy\_b} ($n_{\text{ref}}=3$) lowers forgetting but also newest-experience accuracy
+(0.227 vs 0.515 at memory 60). The relaxed variant (tol $0.03$, $\beta=0.3$, $n_{\text{ref}}=50$, chosen on
+validation) misses the predeclared accuracy non-inferiority bound ($-0.01$) at memory 60 and meets it at
+memory 100, where it also lies above the learning-rate frontier ($+0.058$).
+
+\paragraph{Degree control.} For ordinary SGD, 9 of 25 validation candidates were feasible and the rule
+selected $m=[1,0,1,1]$; on test splits (memory 60) accuracy changed by $-0.004\,[-0.018,+0.011]$ and
+forgetting by $-0.027\,[-0.041,-0.013]$, while the smallest mean arrival accuracy (the floor statistic, minimum over experiences of the mean over seeds and splits) moved from 0.515 to 0.510: lower forgetting at no measurable accuracy cost on this dataset, from one dataset and one selected candidate, so not evidence of a general improvement. For exact \texttt{strategy\_b} and the relaxed
+variant \emph{no} candidate was feasible (0 of 25), because even the all-ones baseline stays below the floor
+$0.5$ on some experience; by the rule nothing is selected. The floor was set with Split MNIST in view, not
+tuned for digits.
+
+\paragraph{Limits.} One small dataset, one fixed random projection, a five-task protocol. The
+relaxed variant's benefit is empirical and outside the guarantee of Prop.~\ref{p:sb}; the identity
+$R\Delta W=0$ is about reference inputs only.
+
+\section{Reproduce}
+\begin{verbatim}
+python stable_continual_learning.py --check   # numerical checks
+python stable_continual_learning.py           # demo
+python benchmark.py                           # tuning, paired tests
+\end{verbatim}
+Dependencies: NumPy, SciPy, scikit-learn.
+\end{document}
