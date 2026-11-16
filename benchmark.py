@@ -28,6 +28,10 @@ LR_SCALES = (1.0, 0.75, 0.5, 0.35, 0.25)
 FACTORS = (0.0, 0.05, 0.1, 0.25, 0.5, 0.75)  # degree-control factors below 1
 FLOOR = 0.5  # acquisition floor, fixed in advance
 
+FUNCTIONAL_LAMBDAS = (0.0, 0.03, 0.1, 0.3, 1.0, 3.0)
+OLD_ACCURACY_MARGIN = 0.01
+FORGETTING_MARGIN = 0.01
+
 
 def load(split_seed, val=False):
     d = load_digits()
@@ -117,6 +121,75 @@ def mean_row(res):
     out = {k: float(np.mean(v)) for k, v in res.items() if k != "immediate"}
     out["min_immediate"] = float(np.mean(res["immediate"], axis=0).min())
     return out
+
+def functional_regularization_study():
+    """Tune functional regularization on validation data, then test the selected value."""
+    for mem in (60, 100):
+        configs = {
+            f"lambda={lam:g}": (
+                {"functional_lambda": lam},
+                1.0,
+                None,
+            )
+            for lam in FUNCTIONAL_LAMBDAS
+        }
+
+        validation = table(
+            configs,
+            (100, 101, 102, 103),
+            (1, 2),
+            mem,
+            True,
+        )
+        means = {name: mean_row(result) for name, result in validation.items()}
+        baseline = means["lambda=0"]
+
+        feasible = {
+            name: result
+            for name, result in means.items()
+            if result["old"] >= baseline["old"] - OLD_ACCURACY_MARGIN
+            and result["forgetting"]
+            <= baseline["forgetting"] + FORGETTING_MARGIN
+        }
+
+        print(f"\n[functional regularization, memory {mem}/class]")
+        print("lambda       acc    forget  plasticity  newest  old")
+        for name, result in means.items():
+            print(
+                f"{name:12s} {result['acc']:.3f}  "
+                f"{result['forgetting']:.3f}   "
+                f"{result['plasticity']:.3f}     "
+                f"{result['newest']:.3f}  {result['old']:.3f}"
+            )
+
+        if not feasible:
+            print("No feasible validation candidate.")
+            continue
+
+        selected = max(feasible, key=lambda name: feasible[name]["newest"])
+        print(f"Selected on validation: {selected}")
+
+        test = table(
+            {
+                "baseline": ({"functional_lambda": 0.0}, 1.0, None),
+                "regularized": (configs[selected][0], 1.0, None),
+            },
+            range(10),
+            (1, 2),
+            mem,
+            False,
+        )
+
+        print("[held-out test: regularized minus baseline]")
+        for metric in ("acc", "newest", "old", "forgetting"):
+            diff = paired_ci(
+                test["regularized"][metric],
+                test["baseline"][metric],
+            )
+            print(
+                f"{metric:10s} {diff[0]:+.3f} "
+                f"[{diff[1]:+.3f}, {diff[2]:+.3f}]"
+            )
 
 
 def main():
@@ -226,6 +299,8 @@ def main():
             f"min arrival acc {mean_row(res['base'])['min_immediate']:.3f} -> "
             f"{mean_row(res['ctrl'])['min_immediate']:.3f}"
         )
+
+    functional_regularization_study()
 
 
 if __name__ == "__main__":

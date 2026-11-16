@@ -59,6 +59,30 @@ def softmax(z):
     e = np.exp(z - z.max(1, keepdims=True))
     return e / e.sum(1, keepdims=True)
 
+def functional_distillation_gradient(X, W, W_teacher, n_old, n_seen):
+    """Gradient of KL(teacher || current) on old reference examples.
+
+    The teacher distribution covers old classes only. It is padded with
+    zeros for new classes, while the student distribution covers all
+    classes seen in the current experience.
+    """
+    if not 0 <= n_old <= n_seen <= W.shape[1]:
+        raise ValueError("require 0 <= n_old <= n_seen <= number of classes")
+    if W_teacher.shape != W.shape:
+        raise ValueError("teacher and current weights must have the same shape")
+    if X.ndim != 2 or X.shape[1] != W.shape[0]:
+        raise ValueError("X and W have incompatible feature dimensions")
+
+    if len(X) == 0 or n_old == 0:
+        return np.zeros((W.shape[0], n_seen), dtype=W.dtype)
+
+    teacher = softmax(X @ W_teacher[:, :n_old])
+    student = softmax(X @ W[:, :n_seen])
+
+    target = np.zeros_like(student)
+    target[:, :n_old] = teacher
+
+    return X.T @ (student - target) / len(X)
 
 # ----------------------------------------------------------------------------- diagonal rates
 def _real(v, what):
@@ -160,6 +184,8 @@ def train_task(
     n_ref=3,
     tol=1e-10,
     beta=0.0,
+    n_old=0,
+    functional_lambda=0.0,
     info=None,
 ):
     """Train one experience in place. Defaults of strategy_b are those of the PR (exact, beta=0).
@@ -171,7 +197,16 @@ def train_task(
         raise ValueError(f"strategy must be one of {STRATEGIES}")
     if not 0.0 <= beta <= 1.0:
         raise ValueError("beta must lie in [0, 1]")
+    if not np.isfinite(functional_lambda) or functional_lambda < 0:
+        raise ValueError("functional_lambda must be finite and non-negative")
+    if not 0 <= n_old <= n_seen <= W.shape[1]:
+        raise ValueError("require 0 <= n_old <= n_seen <= number of classes")
     count = W.shape[0]
+    W_teacher = (
+        W.copy()
+        if functional_lambda > 0 and n_old > 0
+        else None
+    )
     d = diagonal_rates(eta, deg[:count], control)
     if not d.any():
         return W
@@ -195,7 +230,23 @@ def train_task(
             P = softmax(xb @ W[:, :n_seen])
             P[np.arange(len(b)), ya[b]] -= 1.0
             G = xb.T @ P / len(b)
-            W[:, :n_seen] -= d[:, None] * G if N is None else null_step(G, N, d, beta)
+
+            if W_teacher is not None:
+                old_batch = b >= len(X)
+                if old_batch.any():
+                    G += functional_lambda * functional_distillation_gradient(
+                        xb[old_batch],
+                        W,
+                        W_teacher,
+                        n_old,
+                        n_seen,
+                    )
+
+            W[:, :n_seen] -= (
+                d[:, None] * G
+                if N is None
+                else null_step(G, N, d, beta)
+            )
     return W
 
 
@@ -231,6 +282,7 @@ def run(Phi_tr, y_tr, Phi_te, y_te, deg, seed, eta, *, mem=100, **kw):
             eta,
             rng,
             2 * t + 2,
+            n_old=2 * t,
             info=info,
             **kw,
         )
