@@ -65,7 +65,7 @@
 \maketitle
 
 \begin{abstract}
-\noindent This document explains the \code{stable\_continual\_learning} package: a small NumPy implementation of a polynomial classifier that learns the ten handwritten-digit classes in five sequential experiences, using progressive feature expansion, replay memory, per-degree diagonal learning rates with degree control, and a rate-weighted null-space update. That update is the \code{strategy\_b} step of the \code{polynomial\_cl} \code{diagonal\_control} PR, together with two named relaxations of it. The document keeps the structure of the previous edition and is updated to the current code. Where earlier descriptions disagreed with the code or the data, the text here has been corrected; those corrections and the changes for this code version are listed in Appendix~\ref{app:corrections}, and Appendix~\ref{app:verify} reports numbers obtained by actually running the package.
+\noindent This document explains the \code{stable\_cl} package (repository \code{stable\_continual\_learning\_package}): a small NumPy implementation of a polynomial classifier that learns the ten handwritten-digit classes in five sequential experiences, using progressive feature expansion, replay memory, per-degree diagonal learning rates with degree control, and a rate-weighted null-space update. That update is the \code{strategy\_b} step of the \code{polynomial\_cl} \code{diagonal\_control} PR, together with two named relaxations of it. The document keeps the structure of the previous edition and is updated to the current code. Where earlier descriptions disagreed with the code or the data, the text here has been corrected; those corrections and the changes for this code version are listed in Appendix~\ref{app:corrections}, and Appendix~\ref{app:verify} reports numbers obtained by actually running the package.
 \end{abstract}
 
 {\setcounter{tocdepth}{1}\setlength{\parskip}{0pt}\tableofcontents}
@@ -128,7 +128,7 @@ x_i'=\frac{x_i}{16}.
 \qquad
 \tilde x_{ij}=\frac{x_{ij}-\mu_j}{\sigma_j}.
 \]
-Importantly, the test data uses the \emph{training} statistics. It does not calculate its own mean and standard deviation, so no test information leaks into preprocessing.
+Importantly, the test data uses the \emph{training} statistics. It does not calculate its own mean and standard deviation, so no test information leaks into preprocessing. The same rule applies to the validation views used by \code{benchmark.py}: the training part is first cut into fitting and validation rows, and the mean and standard deviation are computed from the fitting rows only (\code{load\_digits\_features(..., validation=True)}).
 
 \begin{reviewbox}
 Three of the 64 pixels are constant (zero) in this dataset, so their $\sigma_j$ is only the $10^{-6}$ safeguard. This is harmless here because those pixels are also zero in every test image. On a different dataset, a pixel that is constant in training but nonzero at test time would be amplified by roughly $10^{6}$.
@@ -455,7 +455,7 @@ This is a form of feature-group learning-rate control, and it follows the \code{
 
 \subsection{Conventions enforced by the code}
 
-All of the following are enforced by \code{diagonal\_rates} and tested by \code{check()}: $m=\mathbf 1$ (or \code{control=None}) gives $d_j=\eta_{\deg(j)}$ exactly; $m_g=0$ freezes degree group $g$; an all-zero $d$ is a valid no-op experience; $\eta$ and $m$ must be real numbers (booleans, complex values and strings are rejected), finite, with $\eta\ge0$ and $m\in[0,1]$; and $m$ is never broadcast, so it must have exactly four entries. The map $j\mapsto d_j$ is \emph{prefix-stable}: a feature added by expansion takes the rate of its own degree, and old features keep theirs.
+All of the following are enforced by \code{diagonal\_rates} and tested in \code{tests/test\_degree\_control.py}: $m=\mathbf 1$ (or \code{control=None}) gives $d_j=\eta_{\deg(j)}$ exactly; $m_g=0$ freezes degree group $g$; an all-zero $d$ is a valid no-op experience; $\eta$ and $m$ must be real numbers (booleans, complex values and strings are rejected), finite, with $\eta\ge0$ and $m\in[0,1]$; and $m$ is never broadcast, so it must have exactly four entries. The map $j\mapsto d_j$ is \emph{prefix-stable}: a feature added by expansion takes the rate of its own degree, and old features keep theirs.
 
 \subsection{Why is this useful?}
 
@@ -617,7 +617,7 @@ How approximate? On split 0 with $\eta=3$, the singular values of $RD^{1/2}$ hav
 
 \subsection{What the step provably does}
 
-Write $u=D^{1/2}G$, $P=NN^\top$, $S=\{j:d_j>0\}$, and let $R_S$ keep the columns of $R$ in $S$. For the \emph{exact} step ($\beta=0$, $\text{tol}\to0$, so $P$ projects onto $\Null(RD^{1/2})$), \code{math.pdf} proves:
+Write $u=D^{1/2}G$, $P=NN^\top$, $S=\{j:d_j>0\}$, and let $R_S$ keep the columns of $R$ in $S$. For the \emph{exact} step ($\beta=0$, $\text{tol}\to0$, so $P$ projects onto $\Null(RD^{1/2})$), \code{math.tex} proves:
 \begin{enumerate}[label=(\alph*)]
 \item $R\,\Delta W=0$: every reference logit is unchanged after each step.
 \item Row $j$ of $\Delta W$ is zero whenever $d_j=0$, so a frozen degree group does not move.
@@ -760,7 +760,7 @@ A model with low forgetting but very poor newest-experience accuracy is not nece
 The \code{demo()} function compares them with: data split seed 0; training seeds 3, 4, 5, 6, 7; 100 replay examples per class; three epochs per experience; learning rate 3 for every degree and no degree control.
 
 \begin{verifybox}
-Running \code{python stable\_continual\_learning.py} reproduces:
+Running \code{python -m stable\_cl} reproduces:
 \begin{center}\small
 \begin{tabular}{@{}lccccc@{}}
 \toprule
@@ -785,7 +785,7 @@ Only the relaxation is tuned. It tries $\text{tol}\in\{0.3,0.1,0.03,0.01\}$ and 
 \[
 F_{\text{null}}\le0.7\,F_{\text{ordinary}},
 \]
-(at least 30\% less forgetting on validation data) it selects the one with the highest validation accuracy, and raises an error if none qualifies. Test data is not used for this selection. The selected configuration is $\text{tol}=0.03$, $\beta=0.3$ (ordinary validation forgetting $0.046$).
+(at least 30\% less forgetting on validation data) it selects the one with the highest validation accuracy, and raises an error if none qualifies. Test data is not used for this selection. The selected configuration is $\text{tol}=0.03$, $\beta=0.3$ (ordinary validation forgetting $0.042$).
 
 \subsection{Testing}
 
@@ -836,20 +836,22 @@ How strong is this evidence? Four honest qualifications. (i)~The relaxation's ac
 
 \section{What does each file do?}
 
-The package contains \textbf{seven} files:
+The package consists of the following files. The PDFs of the two \LaTeX{} documents are \emph{not} committed; they are built locally (see \code{README.md}).
 
 \begin{center}
 \begin{tabular}{@{}lp{9.6cm}@{}}
 \toprule
 File & Responsibility\\
 \midrule
-\code{stable\_continual\_learning.py} & Main implementation: data preparation, polynomial features, expansion, diagonal rates, classifier, replay, SGD, null-space updates, training loop, metrics, demo, and numerical checks.\\
+\code{stable\_cl/features.py} & Polynomial feature map and zero-initialized expansion.\\
+\code{stable\_cl/optimization.py} & Diagonal degree-wise rates, the null-space basis, the (relaxed) null-space step and the free dimension.\\
+\code{stable\_cl/training.py} & Softmax and the training of one experience on current data plus replay.\\
+\code{stable\_cl/experiment.py} & Data preparation, the five class-incremental experiences, the metrics and the demo.\\
 \code{benchmark.py} & Validation-based selection of the relaxation, comparisons against ordinary SGD, smaller learning rates and the exact step, and the degree-control study.\\
+\code{tests/} & The pytest suite that checks the mathematical properties of every function.\\
 \code{README.md} & Short description, run and build instructions.\\
-\code{math.tex} & LaTeX source of the mathematical specification.\\
-\code{math.pdf} & The mathematical specification: definitions, propositions, proofs, results.\\
+\code{math.tex} & LaTeX source of the mathematical specification: definitions, propositions, proofs, results.\\
 \code{explain.tex} & LaTeX source of this document.\\
-\code{explain.pdf} & This document, compiled.\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -857,25 +859,26 @@ File & Responsibility\\
 The key functions are:
 
 \begin{center}
-\begin{tabular}{@{}lp{9.6cm}@{}}
+\begin{tabular}{@{}llp{8.2cm}@{}}
 \toprule
-Function & Responsibility\\
+Function & Module & Responsibility\\
 \midrule
-\code{poly\_features()} & Generates degree-ordered, degree-scaled polynomial features.\\
-\code{expand()} & Adds zero-initialized coefficient rows.\\
-\code{softmax()} & Converts logits into probabilities.\\
-\code{diagonal\_rates()} & Builds and validates the vector $d_j=\eta_{\deg(j)}m_{\deg(j)}$.\\
-\code{null\_basis()} & Computes the numerical null-space basis of $RD^{1/2}$ by SVD.\\
-\code{null\_step()} & Computes the rate-weighted null-space step.\\
-\code{free\_dim()} & Counts the feature directions that can still move, $\operatorname{rank}(D^{1/2}N)$.\\
-\code{train\_task()} & Trains one experience on current data plus replay, with \code{strategy}, \code{control}, \code{n\_ref}, \code{tol}, \code{beta}.\\
-\code{run()} & Runs all five experiences and computes the metrics.\\
-\code{load\_digits\_features()} & Loads, preprocesses, projects and transforms the digits dataset.\\
-\code{demo()} & Runs the ordinary / exact / relaxed demonstration (\code{CONFIGS}).\\
-\code{check()} & Runs numerical checks, including the parity check against \code{polynomial\_cl}.\\
+\code{poly\_features()} & \code{features} & Generates degree-ordered, degree-scaled polynomial features.\\
+\code{expand()} & \code{features} & Adds zero-initialized coefficient rows.\\
+\code{diagonal\_rates()} & \code{optimization} & Builds and validates the vector $d_j=\eta_{\deg(j)}m_{\deg(j)}$.\\
+\code{null\_basis()} & \code{optimization} & Computes the numerical null-space basis of $RD^{1/2}$ by SVD.\\
+\code{null\_step()} & \code{optimization} & Computes the rate-weighted null-space step (returned unsigned; $\Delta W$ is its negative).\\
+\code{free\_dim()} & \code{optimization} & Counts the feature directions that can still move, $\operatorname{rank}(D^{1/2}N)$.\\
+\code{softmax()} & \code{training} & Converts logits into probabilities.\\
+\code{train\_task()} & \code{training} & Trains one experience on current data plus replay, with \code{strategy}, \code{control}, \code{n\_ref}, \code{tol}, \code{beta}.\\
+\code{run()} & \code{experiment} & Runs all five experiences and computes the metrics.\\
+\code{load\_digits\_features()} & \code{experiment} & Loads, splits, standardises (fitting-set statistics), projects and transforms the digits dataset.\\
+\code{demo()} & \code{experiment} & Runs the ordinary / exact / relaxed demonstration (\code{CONFIGS}).\\
 \bottomrule
 \end{tabular}
 \end{center}
+
+Every function carries a docstring stating its purpose, argument shapes, return value and, where it implements a mathematical operation, the same equation as in this document and in \code{math.tex}.
 
 The benchmark calls \code{run()} rather than implementing a second training algorithm, so the demonstration and the benchmark exercise the same learning system. This is good design.
 
@@ -892,12 +895,12 @@ The package retains two update families: ordinary SGD and the rate-weighted null
 \item \textbf{Polynomial feature prefix property.} Lower-degree features are prefixes of higher-degree feature maps.
 \item \textbf{Expansion invariance.} Appending zero rows preserves logits: $\phi_{d+1}(x)^\top\begin{bmatrix}W_d\\0\end{bmatrix}=\phi_d(x)^\top W_d$.
 \item \textbf{Diagonal-rate conventions.} $m=\mathbf 1$ is the uncontrolled rate, $m_g=0$ freezes a group, an all-zero rate is a no-op, and the rate map is prefix-stable.
-\item \textbf{Exact null-space step.} For $\beta=0$ and exact null space: $R\Delta W=0$, frozen rows stay fixed, the step is the constrained minimiser of Proposition~1(c) of \code{math.pdf}, and it is a descent step.
+\item \textbf{Exact null-space step.} For $\beta=0$ and exact null space: $R\Delta W=0$, frozen rows stay fixed, the step is the constrained minimiser of Proposition~1(c) of \code{math.tex}, and it is a descent step.
 \item \textbf{Ordinary-SGD equivalence.} At $\beta=1$: $\Delta W=-DG$ for every tolerance.
 \item \textbf{Relaxation bound.} For any $\beta,\text{tol}$ the reference logits move by $\beta$ times their SGD change up to $(1-\beta)\,\text{tol}\cdot\max(\sigma_{\max},1)\,\|D^{1/2}G\|_F$, and every step is non-ascent.
 \item \textbf{Compatibility.} The model can expand, rebuild the null-space basis, and continue learning the new coefficients.
 \end{enumerate}
-These are properties of the implementation and its mathematical construction. The \code{check()} function tests the diagonal-rate conventions, the exact step ($R\Delta W=0$, frozen rows, an independent pseudo-inverse form, the constrained-minimiser property, the free dimension), the endpoint $\beta=1$, the blend identity and the relaxation bound on random data, whole-experience reference-logit invariance on toy data, that an all-ones control reproduces the uncontrolled run and an all-zero control is a no-op, and (when \code{polynomial\_cl} is importable) one step against the PR. The exact-step properties use an \emph{exact} null space ($\text{tol}\approx10^{-10}$); they do not carry over to the relaxed $\text{tol}=0.03$ except through the bound above. In the environment used for Appendix~\ref{app:verify} \code{polynomial\_cl} was not installed, so the PR-parity check printed ``skipped''.
+These are properties of the implementation and its mathematical construction. The pytest suite (\code{tests/}) tests the polynomial feature count, ordering and prefix property, expansion invariance, the diagonal-rate conventions, the exact step ($R\Delta W=0$, frozen rows, an independent pseudo-inverse form, the constrained-minimiser property, the free dimension), the endpoint $\beta=1$, the blend identity and the relaxation bound on random data, the cross-entropy gradient inside \code{train\_task} against finite differences, whole-experience reference-logit invariance on toy data, that an all-ones control reproduces the uncontrolled run and an all-zero control is a no-op, the metric definitions, that evaluation rows do not influence preprocessing, the benchmark statistics and selection rule, and (when \code{polynomial\_cl} is importable) one step against the PR. The exact-step properties use an \emph{exact} null space ($\text{tol}\approx10^{-10}$); they do not carry over to the relaxed $\text{tol}=0.03$ except through the bound above. In the environment used for Appendix~\ref{app:verify} \code{polynomial\_cl} was not installed, so the PR-parity test was skipped.
 
 \section{What has not been established?}
 
@@ -912,7 +915,7 @@ These are properties of the implementation and its mathematical construction. Th
 \item Nothing is shown about generalization to other datasets.
 \item No computational or memory advantage of progressive expansion is demonstrated.
 \item No expansion schedules are compared with one another.
-\item The PR's combination step and Split-MNIST study are not repeated, and agreement with \code{polynomial\_cl} was not run in the verification environment.
+\item The PR's combination step and Split-MNIST study are not repeated, and agreement with \code{polynomial\_cl} was not tested in the verification environment.
 \end{itemize}
 That gap deserves emphasis:
 
@@ -987,11 +990,22 @@ These corrections were made in the previous edition of this document and are kep
 \item \textbf{Files.} The Markdown copies of this document and of the specification are no longer in the package; a \code{README.md} replaces them.
 \end{enumerate}
 
+\subsection{Changes for the refactoring}
+
+This version reorganises the code and corrects one preprocessing flaw; the learning algorithm is unchanged.
+\begin{enumerate}
+\item \textbf{Structure.} The single module \code{stable\_continual\_learning.py} became the package \code{stable\_cl} (\code{features}, \code{optimization}, \code{training}, \code{experiment}); the function bodies were moved without numerical change. The demo is run with \code{python -m stable\_cl}.
+\item \textbf{Tests.} The numerical checks formerly inside \code{check()} are now pytest modules in \code{tests/}, with additional tests (feature count and ordering, the cross-entropy gradient against finite differences, the metric definitions, the benchmark statistics and the selection rule). The implementation no longer contains a test suite.
+\item \textbf{Documentation.} Every function has a docstring with its purpose, shapes, return value and, where relevant, its equation. \code{null\_step} documents explicitly that it returns the \emph{unsigned} step $S$ and that $\Delta W=-S$.
+\item \textbf{Validation preprocessing.} Previously the standardisation statistics were computed on the whole training part, so the validation rows influenced the preprocessing used to evaluate them. They are now computed on the fitting rows only. Test splits were never affected. Effect: validation forgetting of ordinary SGD $0.046\to0.042$; the selected relaxation ($\text{tol}=0.03$, $\beta=0.3$), the feasible counts (9, 0, 0 of 25), the selected control $m=[1,0,1,1]$ and every test number are unchanged.
+\item \textbf{Files.} The PDFs are no longer described as part of the package; they are built locally.
+\end{enumerate}
+
 \section{Independent verification}\label{app:verify}
 
 All numbers below were obtained by running the package unmodified (NumPy 2.5.4, SciPy 1.18.1, scikit-learn 1.9.1).
 
-\paragraph{Commands.} \code{python stable\_continual\_learning.py --check} prints ``all checks passed'' (and ``PR parity: skipped'' because \code{polynomial\_cl} was not importable); the demo output is shown in \S\ref{sec:demo}.
+\paragraph{Commands.} \code{python -m pytest} runs the test suite (the PR-parity test is skipped because \code{polynomial\_cl} was not importable); the demo output is shown in \S\ref{sec:demo}.
 
 \paragraph{Feature dimensions.} The degree blocks contain 1, 16, 136, 816 features (cumulative 1, 17, 153, 969), and the degree labels are non-decreasing, confirming the prefix property. Train and test matrices have shapes $1347\times969$ and $450\times969$.
 
@@ -1014,10 +1028,10 @@ Null-space dimension at experience 3 as a function of the tolerance: 966 ($0.3$)
 
 \paragraph{Residual reference change at $\beta=0$.} For a random gradient at experience 5 ($n_{\text{ref}}=50$), $\|R\Delta W\|/\|RDG\|$ was $0.106$ with tol $=0.03$ and $9.2\times10^{-16}$ with tol $=10^{-10}$.
 
-\paragraph{Benchmark.} \code{benchmark.py} was run in full after two corrections made on review (the null-space threshold now follows the PR's $\text{tol}\cdot\max(\sigma_{\max},1)$, and the acquisition floor takes the minimum \emph{after} averaging over seeds and splits); its output is reproduced below. The test tables, the selected relaxation and the feasible counts are unchanged by the corrections; only the reported worst arrival accuracy moved ($0.477\to0.510$).
+\paragraph{Benchmark.} \code{benchmark.py} was run in full after two corrections made on review (the null-space threshold now follows the PR's $\text{tol}\cdot\max(\sigma_{\max},1)$, and the acquisition floor takes the minimum \emph{after} averaging over seeds and splits); its output is reproduced below. The test tables, the selected relaxation and the feasible counts are unchanged by the corrections; only the reported worst arrival accuracy moved ($0.477\to0.510$). A later refactoring (below) changed one printed number: the validation forgetting of ordinary SGD, $0.046\to0.042$.
 
 \begin{lstlisting}[language={},basicstyle=\ttfamily\tiny,columns=fixed,breaklines=true,breakindent=0pt]
-[validation] relaxed selected: tol=0.03 beta=0.3 n_ref=50; ordinary forgetting=0.046
+[validation] relaxed selected: tol=0.03 beta=0.3 n_ref=50; ordinary forgetting=0.042
 
 [test, memory 60/class, 10 splits x 2 seeds]
 method       acc    forget  plasticity  newest  old

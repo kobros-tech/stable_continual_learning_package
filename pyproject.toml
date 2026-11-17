@@ -1,0 +1,13 @@
+[project]
+name = "stable-continual-learning"
+version = "0.2.0"
+description = "Class-incremental polynomial classifier: ordinary SGD vs strategy_b null-space step"
+requires-python = ">=3.9"
+dependencies = ["numpy", "scipy", "scikit-learn"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

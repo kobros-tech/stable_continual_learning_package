@@ -4,36 +4,45 @@ Class-incremental digits (five experiences) with degree-balanced polynomial feat
 compares ordinary SGD with `strategy_b` (null-space step) under the diagonal degree-control
 rate `d_j = eta_deg(j) * m_deg(j)` of the `polynomial_cl` `diagonal_control` PR. The earlier
 "null-space" update is `strategy_b` (beta = 0, tol -> 0); `tol > 0` and `beta > 0` are named
-relaxations. Mathematics: `math.pdf`. Full explanation: `explain.pdf`.
+relaxations. Mathematics: `math.tex`. Full explanation: `explain.tex`. Both are LaTeX sources;
+the PDFs are not committed and are built locally (see below).
 
-## Files
+## Layout
 
-| file | role |
-|---|---|
-| `stable_continual_learning.py` | features, diagonal rates, the two updates, training loop, demo, `--check` |
-| `benchmark.py` | validation tuning, paired test comparisons, degree-control selection |
-| `math.tex`, `math.pdf` | specification: definitions, propositions, proofs, results |
-| `explain.tex`, `explain.pdf` | full explanation of the package (features, replay, null-space update, experiments) |
+| path                      | role                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `stable_cl/features.py`   | `poly_features`, `expand`: degree-ordered polynomial features, zero-initialised growth |
+| `stable_cl/optimization.py` | `diagonal_rates`, `null_basis`, `null_step`, `free_dim`: the rates and the update |
+| `stable_cl/training.py`   | `softmax`, `train_task`: replay minibatches and one experience of training          |
+| `stable_cl/experiment.py` | `load_digits_features`, `run`, `demo`: data, the five experiences, metrics          |
+| `benchmark.py`            | validation tuning, paired test comparisons, degree-control selection                |
+| `tests/`                  | pytest suite (numerical properties of every function)                               |
+| `math.tex`                | specification: definitions, propositions, proofs, results                           |
+| `explain.tex`             | full explanation of the package (features, replay, null-space update, experiments)  |
+
+Every function has a docstring with its purpose, argument shapes, return value and, where it
+implements a mathematical operation, the equation (Sphinx `.. math::` syntax). The equations are
+the same ones as in `math.tex`.
 
 ## Run the code
 
-Requires Python 3 with NumPy, SciPy and scikit-learn.
+Requires Python 3 with NumPy, SciPy and scikit-learn (`pytest` for the tests).
 
 ```bash
-python stable_continual_learning.py --check   # numerical checks (seconds)
-python stable_continual_learning.py           # demo: three methods on one split
-python benchmark.py                           # about 10 minutes on one CPU core
+python -m pytest                  # test suite (seconds)
+python -m stable_cl    # demo: three methods on one split
+python benchmark.py               # several minutes on one CPU core
 ```
 
-To also check the step against the PR, make `polynomial_cl` importable before `--check`, e.g.
-`PYTHONPATH=/path/to/polynomial_cl_core-diagonal_control/src python stable_continual_learning.py --check`.
-Without it the parity check prints "skipped".
+One test compares a `strategy_b` step with the PR implementation. It is skipped unless
+`polynomial_cl` is importable, e.g.
+`PYTHONPATH=/path/to/polynomial_cl_core-diagonal_control/src python -m pytest tests/test_pr_parity.py`.
 
 ## Build the PDFs
 
 Needs a TeX distribution with `pdflatex` and the packages `lmodern`, `microtype`, `amsmath`,
-`amsthm`, `mathtools`, `enumitem`, `booktabs`, `hyperref` (all in TeX Live and MiKTeX). Run each
-file twice so cross-references resolve:
+`amsthm`, `mathtools`, `enumitem`, `booktabs`, `hyperref` (all in TeX Live and MiKTeX), plus
+those loaded by `explain.tex`. Run each file twice so cross-references resolve:
 
 ```bash
 pdflatex math.tex && pdflatex math.tex
@@ -45,5 +54,6 @@ you do not want them in the repository.
 
 ## Keeping the documents in sync
 
-The numbers in section 5 of `math.tex` come from `python benchmark.py`; if the code or the
-protocol changes, rerun the benchmark and update that section and then rebuild the PDFs.
+The numbers in section 5 of `math.tex` and in `explain.tex` come from `python benchmark.py` and
+`python -m stable_cl`; if the code or the protocol changes, rerun them, update those
+numbers, and rebuild the PDFs.
