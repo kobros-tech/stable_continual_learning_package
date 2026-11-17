@@ -81,7 +81,7 @@ $A_S=R_SD_S^{1/2}$, $P$ is block diagonal and $D^{1/2}Pu$ is supported on $S$.
 Adding a feature to $S$ adds one to $|S|$ and at most one to $\rank R_S$.
 (f) \texttt{fit\_task} applies $\sqrt{s}\,NN^\top\!\sqrt{s}\,g$ scaled by the base rate, with $s=d/\text{base}$ and $N$
 spanning $\nul(R\sqrt{s})=\nul A$. The two steps agree; numerically they differ by $2\!\times\!10^{-8}$
-(the PR works in float32), checked by \texttt{--check} when \texttt{polynomial\_cl} is importable.
+(the PR works in float32), checked by \texttt{tests/test\_pr\_parity.py} when \texttt{polynomial\_cl} is importable (it is skipped otherwise).
 Both cut singular values at the same threshold $10^{-10}\max(\sigma_1,1)$ (the PR's convention, now also used by \texttt{null\_basis}), so they select the same space unless a singular value lies near it. In the uncontrolled benchmark runs the smallest $\sigma_1$ over all splits and experiences is $4.59>1$, so there the threshold equals $\mathrm{tol}\,\sigma_1$ and the reported numbers do not depend on the $\max(\cdot,1)$.
 \end{proof}
 
@@ -110,7 +110,9 @@ Spectral tolerance and $\beta$ trade this guarantee for plasticity.
 Let $A_{t,j}$ be the accuracy on experience $j$ after experience $t$ (five experiences, $t,j=0..4$). Reported:
 final accuracy $\tfrac15\sum_jA_{4,j}$; forgetting $\tfrac14\sum_{j<4}\big(\max_{j\le t\le3}A_{t,j}-A_{4,j}\big)$;
 plasticity $\tfrac15\sum_tA_{t,t}$; newest $A_{4,4}$; old $\tfrac14\sum_{j<4}A_{4,j}$. Low forgetting is
-meaningful only beside plasticity.
+meaningful only beside plasticity. The reported intervals are paired $t$-intervals over the ten test splits
+of the per-split difference; each per-split value is already the mean of two training seeds, so the
+intervals describe variability between splits and do not separately estimate training-seed variability.
 
 \paragraph{Degree-control selection (the PR's rule, validation data only).} Candidates are $m=\mathbf1$ and each
 single degree with one factor in $\{0,.05,.1,.25,.5,.75\}$. A candidate is feasible iff
@@ -133,9 +135,9 @@ Exact \texttt{strategy\_b} ($n_{\text{ref}}=3$) lowers forgetting but also newes
 validation) misses the predeclared accuracy non-inferiority bound ($-0.01$) at memory 60 and meets it at
 memory 100, where it also lies above the learning-rate frontier ($+0.058$).
 
-\paragraph{Degree control.} For ordinary SGD, 9 of 25 validation candidates were feasible and the rule
-selected $m=[1,0,1,1]$; on test splits (memory 60) accuracy changed by $-0.004\,[-0.018,+0.011]$ and
-forgetting by $-0.027\,[-0.041,-0.013]$, while the smallest mean arrival accuracy (the floor statistic, minimum over experiences of the mean over seeds and splits) moved from 0.515 to 0.510: lower forgetting at no measurable accuracy cost on this dataset, from one dataset and one selected candidate, so not evidence of a general improvement. For exact \texttt{strategy\_b} and the relaxed
+\paragraph{Degree control.} For ordinary SGD, 13 of 25 validation candidates were feasible and the rule
+selected $m=[1,0.1,1,1]$; on test splits (memory 60) accuracy changed by $-0.004\,[-0.019,+0.010]$ and
+forgetting by $-0.006\,[-0.018,+0.007]$ (both intervals contain $0$), while the smallest mean arrival accuracy (the floor statistic, minimum over experiences of the mean over seeds and splits) moved from 0.515 to 0.490, below the floor $0.5$ that held on validation data. There is therefore no evidence here that degree control lowers forgetting. With an earlier, unstratified validation cut the rule selected $m=[1,0,1,1]$ and the forgetting change was $-0.027\,[-0.041,-0.013]$; that did not survive stratifying the validation splits, so the selection is sensitive to the validation protocol and should not be quoted as a finding. For exact \texttt{strategy\_b} and the relaxed
 variant \emph{no} candidate was feasible (0 of 25), because even the all-ones baseline stays below the floor
 $0.5$ on some experience; by the rule nothing is selected. The floor was set with Split MNIST in view, not
 tuned for digits.
@@ -144,11 +146,28 @@ tuned for digits.
 relaxed variant's benefit is empirical and outside the guarantee of Prop.~\ref{p:sb}; the identity
 $R\Delta W=0$ is about reference inputs only.
 
+\section{Where each definition lives in the code}
+Each function's docstring states the same equation as this document.
+\begin{center}\small\begin{tabular}{@{}lll@{}}\toprule
+Definition & Function & Module (\texttt{stable\_cl/})\\\midrule
+features $\phi$, degree scaling & \texttt{poly\_features} & \texttt{features.py}\\
+expansion $W\mapsto[W;0]$ & \texttt{expand} & \texttt{features.py}\\
+$d_j=\eta_{\deg(j)}m_{\deg(j)}$ & \texttt{diagonal\_rates} & \texttt{optimization.py}\\
+$N$, null space of $A=RD^{1/2}$ & \texttt{null\_basis} & \texttt{optimization.py}\\
+$D^{1/2}[P+\beta(I-P)]D^{1/2}G$ (unsigned; $\Delta W$ is minus this) & \texttt{null\_step} & \texttt{optimization.py}\\
+$r=\rank(D^{1/2}N)$ & \texttt{free\_dim} & \texttt{optimization.py}\\
+gradient $G$ and the update & \texttt{train\_task} & \texttt{training.py}\\
+$A_{t,j}$, accuracy, forgetting, plasticity & \texttt{run} & \texttt{experiment.py}\\
+standardisation with fitting-set statistics & \texttt{load\_digits\_features} & \texttt{experiment.py}\\
+class-stratified validation cut & \texttt{stratified\_cut} & \texttt{experiment.py}\\
+paired interval, Pareto front, selection rule & \texttt{paired\_ci}, \texttt{pareto}, \texttt{select} & \texttt{benchmark.py}\\
+\bottomrule\end{tabular}\end{center}
+
 \section{Reproduce}
 \begin{verbatim}
-python stable_continual_learning.py --check   # numerical checks
-python stable_continual_learning.py           # demo
-python benchmark.py                           # tuning, paired tests
+python -m pytest                  # numerical tests of every property above
+python -m stable_cl    # demo
+python benchmark.py               # tuning, paired tests
 \end{verbatim}
-Dependencies: NumPy, SciPy, scikit-learn.
+Dependencies: NumPy, SciPy, scikit-learn (pytest for the tests).
 \end{document}
