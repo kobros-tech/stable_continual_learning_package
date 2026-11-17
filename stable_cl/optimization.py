@@ -264,7 +264,9 @@ def null_step(G, N, d, beta=0.0):
     G : ndarray, shape (p, K)
         Minibatch gradient.
     N : ndarray, shape (p, q)
-        Orthonormal basis from :func:`null_basis` (:math:`N^\top N = I`).
+        Orthonormal basis from :func:`null_basis` (:math:`N^\top N = I`).  Finiteness is
+        checked; orthonormality is *assumed* and not verified, because checking it on every
+        minibatch would be wasteful and the basis is built once per experience.
     d : ndarray, shape (p,)
         Diagonal rates, :math:`d \ge 0`.
     beta : float, default 0.0
@@ -278,14 +280,16 @@ def null_step(G, N, d, beta=0.0):
     Raises
     ------
     ValueError
-        If ``beta`` is outside ``[0, 1]``, or the shapes of ``G`` (p, K), ``N`` (p, q) and
-        ``d`` (p,) are incompatible.
+        If ``beta`` is outside ``[0, 1]``, the shapes of ``G`` (p, K), ``N`` (p, q) and
+        ``d`` (p,) are incompatible, or ``N`` contains non-finite values.
     """
     if not 0.0 <= beta <= 1.0:
         raise ValueError("beta must lie in [0, 1]")
     _check_matrix_and_rates(G, d, "G")
     if np.ndim(N) != 2 or np.shape(N)[0] != len(d):
         raise ValueError("N must be 2-D with N.shape[0] == len(d)")
+    if not np.isfinite(N).all():
+        raise ValueError("N must be finite")
     root = np.sqrt(d)[:, None]
     rg = root * G
     return root * (beta * rg + (1.0 - beta) * (N @ (N.T @ rg)))

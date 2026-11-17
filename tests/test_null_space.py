@@ -208,3 +208,12 @@ def test_null_step_and_free_dim_reject_incompatible_shapes(setup):
         null_step(G, N, d[:, None])  # d not 1-D
     with pytest.raises(ValueError):
         free_dim(N[:-1], d)
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_null_step_rejects_a_non_finite_basis(setup, bad):
+    _, G, d, N = setup
+    N = N.copy()
+    N[0, 0] = bad
+    with pytest.raises(ValueError, match="finite"):
+        null_step(G, N, d)

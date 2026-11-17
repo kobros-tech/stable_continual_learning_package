@@ -253,8 +253,17 @@ def demo(seeds=(3, 4, 5, 6, 7)):
     Parameters
     ----------
     seeds : iterable of int
-        Training seeds to average over.
+        Training seeds to average over.  Any iterable (including a generator) is accepted; it is
+        consumed exactly once.
+
+    Raises
+    ------
+    ValueError
+        If ``seeds`` is empty.
     """
+    seeds = tuple(seeds)
+    if not seeds:
+        raise ValueError("seeds must contain at least one training seed")
     data, eta = load_digits_features(), [3.0] * 4
     print(
         f"fixed split seed 0; training seeds {list(seeds)}; memory 100/class; eta={eta}"

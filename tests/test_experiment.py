@@ -205,3 +205,20 @@ def test_non_integer_memory_is_rejected(toy, mem):
 def test_package_exports_every_documented_name():
     for name in stable_cl.__all__:
         assert hasattr(stable_cl, name)
+
+
+# ------------------------------------------------------------------ demo
+def test_demo_accepts_a_generator_and_consumes_it_once(capsys):
+    stable_cl.demo(seed for seed in (3,))
+    out = capsys.readouterr().out
+    assert "training seeds [3]" in out and "nan" not in out.lower()
+    assert (
+        out.count("acc=") == 3
+    )  # one line per configuration, none computed from zero seeds
+
+
+def test_demo_rejects_empty_seeds_before_doing_any_work():
+    with pytest.raises(ValueError, match="at least one"):
+        stable_cl.demo([])
+    with pytest.raises(ValueError, match="at least one"):
+        stable_cl.demo(seed for seed in ())

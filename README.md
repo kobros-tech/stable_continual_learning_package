@@ -34,8 +34,10 @@ python -m stable_cl    # demo: three methods on one split
 python benchmark.py               # several minutes on one CPU core
 ```
 
-One test compares a `strategy_b` step with the PR implementation. It is skipped unless
-`polynomial_cl` is importable, e.g.
+One test compares a `strategy_b` step with the PR implementation. It is skipped, with the reason
+shown by `pytest -rs`, unless the importable `polynomial_cl` is the `diagonal_control` PR version
+(it needs `apply_degree_control`, `step_scale_for`, `degree_of_feature`, `fit_task`,
+`null_space_basis`), e.g.
 `PYTHONPATH=/path/to/polynomial_cl_core-diagonal_control/src python -m pytest tests/test_pr_parity.py`.
 
 ## Build the PDFs
