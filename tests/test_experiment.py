@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 import stable_cl
-from stable_cl import load_digits_features, run
+from stable_cl import load_digits_features, run, stratified_cut
 from stable_cl.experiment import TASKS
 
 
@@ -70,12 +70,19 @@ def _patched_digits(monkeypatch, scale_rows):
     monkeypatch.setattr(ds, "load_digits", lambda: Fake)
 
 
+def _labels():
+    """Digit labels of the whole dataset."""
+    from sklearn.datasets import load_digits
+
+    return load_digits().target
+
+
 def _indices(split_seed, validation):
+    """Fit and evaluation indices of a split, recomputed independently of the loader."""
     order = np.random.default_rng(split_seed).permutation(1797)
     fit, ev = order[: int(0.75 * 1797)], order[int(0.75 * 1797) :]
     if validation:
-        k = int(0.8 * len(fit))
-        fit, ev = fit[:k], fit[k:]
+        fit, ev = stratified_cut(_labels(), fit, 0.8)
     return fit, ev
 
 
@@ -97,13 +104,102 @@ def test_validation_view_is_cut_from_the_training_part_only():
     assert set(fit) | set(ev) == set(tr) and not set(fit) & set(ev)
     assert not (set(fit) | set(ev)) & set(te)
     Phi_f, y_f, Phi_e, y_e, deg = load_digits_features(3, True)
-    assert (len(y_f), len(y_e)) == (len(fit), len(ev)) == (1077, 270)
+    assert (len(y_f), len(y_e)) == (len(fit), len(ev)) and len(fit) + len(ev) == 1347
     assert Phi_f.shape[1] == Phi_e.shape[1] == len(deg) == 969
 
 
-def test_test_protocol_sizes():
+def test_validation_view_is_class_stratified():
+    y = _labels()
+    tr, _ = _indices(103, False)
+    _, y_f, _, y_e, _ = load_digits_features(103, True)
+    n_tr = np.bincount(y[tr], minlength=10)
+    assert np.array_equal(np.bincount(y_f, minlength=10), (0.8 * n_tr).astype(int))
+    assert np.array_equal(
+        np.bincount(y_f, minlength=10) + np.bincount(y_e, minlength=10), n_tr
+    )
+
+
+def test_test_protocol_is_not_stratified_and_keeps_its_sizes():
     _, y_tr, _, y_te, _ = load_digits_features(0)
     assert (len(y_tr), len(y_te)) == (1347, 450)
+    tr, te = _indices(
+        0, False
+    )  # plain permutation cut, unchanged by the validation fix
+    assert np.array_equal(y_tr, _labels()[tr]) and np.array_equal(y_te, _labels()[te])
+
+
+# ------------------------------------------------------------------ stratified_cut
+def test_stratified_cut_takes_the_floor_of_the_fraction_of_every_class():
+    y = np.repeat([0, 1, 2], [10, 7, 3])
+    idx = np.random.default_rng(0).permutation(len(y))
+    first, second = stratified_cut(y, idx, 0.8)
+    assert np.bincount(y[first], minlength=3).tolist() == [8, 5, 2]
+    assert np.bincount(y[second], minlength=3).tolist() == [2, 2, 1]
+
+
+def test_stratified_cut_partitions_preserves_order_and_is_deterministic():
+    y = np.repeat(np.arange(4), 25)
+    idx = np.random.default_rng(1).permutation(len(y))[:80]
+    first, second = stratified_cut(y, idx, 0.5)
+    assert sorted(np.concatenate([first, second])) == sorted(idx)
+    assert not set(first) & set(second)
+    pos = {v: i for i, v in enumerate(idx)}
+    assert all(pos[a] < pos[b] for a, b in zip(first, first[1:]))  # relative order kept
+    assert all(
+        np.array_equal(u, v)
+        for u, v in zip(stratified_cut(y, idx, 0.5), (first, second))
+    )
+
+
+@pytest.mark.parametrize("fraction", [0.0, 1.0, -0.1, 1.5, np.nan])
+def test_stratified_cut_rejects_invalid_fractions(fraction):
+    with pytest.raises(ValueError):
+        stratified_cut(np.zeros(5, int), np.arange(5), fraction)
+
+
+# ------------------------------------------------------------------ replay-memory availability
+def test_memory_larger_than_a_class_raises_instead_of_resampling(toy):
+    with pytest.raises(ValueError, match="replay memory of 41"):
+        run(*toy, 0, 3.0, mem=41)  # the toy has exactly 40 examples per class
+    run(*toy, 0, 3.0, mem=40)  # exactly enough is fine
+
+
+def test_memory_error_names_every_short_class_with_its_count():
+    y = np.repeat(np.arange(10), 30)
+    y[:5] = 3  # class 3 has 35, every other class 30 or fewer
+    X = np.random.default_rng(0).normal(size=(len(y), 3))
+    deg = np.zeros(3, int)
+    with pytest.raises(ValueError) as e:
+        run(X, y, X, y, deg, 0, 3.0, mem=33)
+    msg = str(e.value)
+    assert "0: 25" in msg and "3: 35" not in msg and "9: 30" in msg
+
+
+def test_previous_memory_100_failure_is_now_a_clear_error():
+    """Validation split 103 has only 96 fitting examples of digit 8 (even after stratifying)."""
+    data = load_digits_features(103, validation=True)
+    counts = np.bincount(data[1], minlength=10)
+    assert counts[8] == 96 and counts.min() == 96
+    with pytest.raises(ValueError, match=r"8: 96"):
+        run(*data, 0, 3.0, mem=100)
+
+
+def test_memory_100_is_feasible_on_the_stratified_validation_split_100():
+    data = load_digits_features(100, validation=True)
+    assert np.bincount(data[1], minlength=10).min() >= 100
+    assert 0.0 <= run(*data, 0, 3.0, mem=100)["acc"] <= 1.0
+
+
+@pytest.mark.parametrize("mem", [-1])
+def test_negative_memory_is_rejected(toy, mem):
+    with pytest.raises(ValueError):
+        run(*toy, 0, 3.0, mem=mem)
+
+
+@pytest.mark.parametrize("mem", [2.5, True, "20"])
+def test_non_integer_memory_is_rejected(toy, mem):
+    with pytest.raises(TypeError):
+        run(*toy, 0, 3.0, mem=mem)
 
 
 def test_package_exports_every_documented_name():

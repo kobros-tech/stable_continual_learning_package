@@ -19,6 +19,40 @@ import numpy as np
 N_GROUPS = 4  # degree groups 0..3 (constant, linear, quadratic, cubic)
 
 
+def require_int(value, name, minimum):
+    r"""Validate an integer argument and return it as a built-in ``int``.
+
+    Booleans, floats (even integral ones such as ``3.0``) and strings are rejected, because
+    silently truncating or reinterpreting them would hide caller mistakes.
+
+    Parameters
+    ----------
+    value : int or numpy.integer
+        Candidate value.
+    name : str
+        Argument name used in error messages.
+    minimum : int
+        Smallest accepted value (inclusive).
+
+    Returns
+    -------
+    int
+        ``value`` as a Python integer.
+
+    Raises
+    ------
+    TypeError
+        If ``value`` is not an integer (booleans included).
+    ValueError
+        If ``value < minimum``.
+    """
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise TypeError(f"{name} must be an integer, got {type(value).__name__}")
+    if value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}, got {value}")
+    return int(value)
+
+
 def poly_features(x, degree=3, chunk=256):
     r"""Degree-balanced polynomial feature map, ordered by degree.
 
@@ -62,10 +96,25 @@ def poly_features(x, degree=3, chunk=256):
     Returns
     -------
     Phi : ndarray, shape (m, p)
-        Feature matrix, column order: degree 0, then 1, ..., then ``degree``.
+        Feature matrix of dtype float64, column order: degree 0, then 1, ..., then ``degree``.
+        For ``m == 0`` it has shape ``(0, p)``.
     deg : ndarray of int, shape (p,)
         ``deg[j]`` is the total degree of feature ``j`` (non-decreasing).
+
+    Raises
+    ------
+    TypeError
+        If ``x`` is not real numeric, or ``degree`` / ``chunk`` is not an integer.
+    ValueError
+        If ``x`` is not 2-D with at least one column, ``degree < 0`` or ``chunk < 1``.
     """
+    x = np.asarray(x)
+    if x.ndim != 2 or x.shape[1] < 1:
+        raise ValueError(f"x must be 2-D with at least one column, got shape {x.shape}")
+    if x.dtype.kind not in "iuf":
+        raise TypeError("x must contain real numbers")
+    degree = require_int(degree, "degree", 0)
+    chunk = require_int(chunk, "chunk", 1)
     n = x.shape[1]
     exps = [np.zeros(n, int)]
     for d in range(1, degree + 1):
@@ -76,6 +125,8 @@ def poly_features(x, degree=3, chunk=256):
     E = np.array(exps)
     deg = E.sum(1)
     scale = np.array([1.0 if d == 0 else 1 / sqrt(comb(n + d - 1, d)) for d in deg])
+    if len(x) == 0:
+        return np.empty((0, len(deg))), deg
     Phi = np.concatenate(
         [
             np.prod(x[i : i + chunk, None, :] ** E[None], axis=2) * scale
@@ -112,5 +163,15 @@ def expand(W, count):
     -------
     ndarray, shape (count, K)
         New weight matrix (a new array; ``W`` is not modified) with the same dtype as ``W``.
+
+    Raises
+    ------
+    ValueError
+        If ``W`` is not 2-D or ``count < p_old`` (the classifier can only grow).
+    TypeError
+        If ``count`` is not an integer.
     """
+    if np.ndim(W) != 2:
+        raise ValueError(f"W must be 2-D (features x classes), got {np.ndim(W)}-D")
+    count = require_int(count, "count", len(W))
     return np.vstack([W, np.zeros((count - len(W), W.shape[1]), W.dtype)])

@@ -128,7 +128,7 @@ x_i'=\frac{x_i}{16}.
 \qquad
 \tilde x_{ij}=\frac{x_{ij}-\mu_j}{\sigma_j}.
 \]
-Importantly, the test data uses the \emph{training} statistics. It does not calculate its own mean and standard deviation, so no test information leaks into preprocessing. The same rule applies to the validation views used by \code{benchmark.py}: the training part is first cut into fitting and validation rows, and the mean and standard deviation are computed from the fitting rows only (\code{load\_digits\_features(..., validation=True)}).
+Importantly, the test data uses the \emph{training} statistics. It does not calculate its own mean and standard deviation, so no test information leaks into preprocessing. The same rule applies to the validation views used by \code{benchmark.py}: the training part is first cut 80/20 into fitting and validation rows, \emph{stratified by class} (every class contributes $\lfloor 0.8\,n_c\rfloor$ examples to the fitting rows), and the mean and standard deviation are computed from the fitting rows only (\code{load\_digits\_features(..., validation=True)}).
 
 \begin{reviewbox}
 Three of the 64 pixels are constant (zero) in this dataset, so their $\sigma_j$ is only the $10^{-6}$ safeguard. This is harmless here because those pixels are also zero in every test image. On a different dataset, a pixel that is constant in training but nonzero at test time would be amplified by roughly $10^{6}$.
@@ -781,11 +781,11 @@ The benchmark asks the harder question: if a null-space update forgets less, is 
 
 \subsection{Validation}
 
-Only the relaxation is tuned. It tries $\text{tol}\in\{0.3,0.1,0.03,0.01\}$ and $\beta\in\{0,0.1,0.3\}$, with $n_{\text{ref}}=50$, on four validation splits (seeds 100--103) with two training seeds and memory 60 per class. Among configurations satisfying a \emph{predeclared} requirement
+Only the relaxation is tuned. It tries $\text{tol}\in\{0.3,0.1,0.03,0.01\}$ and $\beta\in\{0,0.1,0.3\}$, with $n_{\text{ref}}=50$, on four validation splits (seeds 100--103) with two training seeds and memory 60 per class. (A memory of 100 per class is not available on every validation split: even after stratification split 103 has only 96 fitting examples of digit 8, and \code{run()} then raises an explicit error instead of resampling with replacement.) Among configurations satisfying a \emph{predeclared} requirement
 \[
 F_{\text{null}}\le0.7\,F_{\text{ordinary}},
 \]
-(at least 30\% less forgetting on validation data) it selects the one with the highest validation accuracy, and raises an error if none qualifies. Test data is not used for this selection. The selected configuration is $\text{tol}=0.03$, $\beta=0.3$ (ordinary validation forgetting $0.042$).
+(at least 30\% less forgetting on validation data) it selects the one with the highest validation accuracy, and raises an error if none qualifies. Test data is not used for this selection. The selected configuration is $\text{tol}=0.03$, $\beta=0.3$ (ordinary validation forgetting $0.053$).
 
 \subsection{Testing}
 
@@ -819,13 +819,13 @@ The benchmark also applies the PR's degree-control selection rule, for single-de
 \toprule
 Base update & Feasible (of 25) & Selected & Test effect at memory 60\\
 \midrule
-ordinary SGD & 9 & $m=[1,0,1,1]$ & $\Delta A=-0.004\,[-0.018,+0.011]$, $\Delta F=-0.027\,[-0.041,-0.013]$; smallest mean arrival accuracy $0.515\to0.510$\\
+ordinary SGD & 13 & $m=[1,0.1,1,1]$ & $\Delta A=-0.004\,[-0.019,+0.010]$, $\Delta F=-0.006\,[-0.018,+0.007]$; smallest mean arrival accuracy $0.515\to0.490$\\
 exact \code{strategy\_b} & 0 & none & ---\\
 relaxed update & 0 & none & ---\\
 \bottomrule
 \end{tabular}
 \end{center}
-For ordinary SGD the selected control lowers forgetting at no measurable accuracy cost and moves the smallest mean arrival accuracy only from 0.515 to 0.510: lower forgetting at no measurable accuracy cost here, but from one dataset and one selected candidate, so not evidence of a general improvement. For the exact step and for the relaxed variant \emph{no} candidate is feasible (0 of 25); by the rule nothing is selected, so no test comparison is made. The acquisition floor was set with Split MNIST in view and was not tuned for digits; for the exact step no candidate is feasible because even the all-ones baseline stays below the floor on some experience. The PR's combination step and Split-MNIST study are not repeated here.
+For ordinary SGD the selected control changes accuracy by an amount indistinguishable from zero, and its forgetting change ($-0.006$) is also indistinguishable from zero: its interval contains $0$. On the test splits the smallest mean arrival accuracy falls from 0.515 to 0.490, below the floor $0.5$ that was satisfied on validation data. So this experiment gives \emph{no evidence} that degree control lowers forgetting. An earlier validation protocol (unstratified cut) selected $m=[1,0,1,1]$ and showed $\Delta F=-0.027\,[-0.041,-0.013]$; that result did not survive stratifying the validation splits, i.e.\ the apparent benefit depended on which candidate a small, noisy validation set happened to select. It should not be quoted as a finding. For the exact step and for the relaxed variant \emph{no} candidate is feasible (0 of 25); by the rule nothing is selected, so no test comparison is made. The acquisition floor was set with Split MNIST in view and was not tuned for digits; for the exact step no candidate is feasible because even the all-ones baseline stays below the floor on some experience. The PR's combination step and Split-MNIST study are not repeated here.
 
 \begin{reviewbox}
 How strong is this evidence? Four honest qualifications. (i)~The relaxation's accuracy intervals contain zero at both memory sizes: the result is ``no measurable accuracy loss with less forgetting'', not ``better accuracy''. (ii)~The exact \code{strategy\_b} step, the one with the logit-preservation guarantee, is clearly worse than ordinary SGD in accuracy at both memory sizes; the practical value sits in the relaxation, which is exactly the part the guarantee does not cover. (iii)~The frontier margin is the relaxation's accuracy minus the accuracy that \code{np.interp} reads off the learning-rate curve at the same forgetting; \code{np.interp} clamps outside the range of the learning-rate controls rather than extrapolating. The verdict rule itself uses only the accuracy and forgetting intervals, not the frontier margin. (iv)~All of it concerns one small dataset, one fixed random projection, and one five-experience protocol. The result is encouraging evidence that the relaxed geometric update offers something beyond lowering the learning rate, but it is not conclusive.
@@ -873,6 +873,7 @@ Function & Module & Responsibility\\
 \code{train\_task()} & \code{training} & Trains one experience on current data plus replay, with \code{strategy}, \code{control}, \code{n\_ref}, \code{tol}, \code{beta}.\\
 \code{run()} & \code{experiment} & Runs all five experiences and computes the metrics.\\
 \code{load\_digits\_features()} & \code{experiment} & Loads, splits, standardises (fitting-set statistics), projects and transforms the digits dataset.\\
+\code{stratified\_cut()} & \code{experiment} & Splits indices so that every class keeps $\lfloor f\,n_c\rfloor$ examples in the first part (used for the validation cut).\\
 \code{demo()} & \code{experiment} & Runs the ordinary / exact / relaxed demonstration (\code{CONFIGS}).\\
 \bottomrule
 \end{tabular}
@@ -992,12 +993,14 @@ These corrections were made in the previous edition of this document and are kep
 
 \subsection{Changes for the refactoring}
 
-This version reorganises the code and corrects one preprocessing flaw; the learning algorithm is unchanged.
+This version reorganises the code and corrects the validation protocol; the learning algorithm is unchanged.
 \begin{enumerate}
 \item \textbf{Structure.} The single module \code{stable\_continual\_learning.py} became the package \code{stable\_cl} (\code{features}, \code{optimization}, \code{training}, \code{experiment}); the function bodies were moved without numerical change. The demo is run with \code{python -m stable\_cl}.
 \item \textbf{Tests.} The numerical checks formerly inside \code{check()} are now pytest modules in \code{tests/}, with additional tests (feature count and ordering, the cross-entropy gradient against finite differences, the metric definitions, the benchmark statistics and the selection rule). The implementation no longer contains a test suite.
 \item \textbf{Documentation.} Every function has a docstring with its purpose, shapes, return value and, where relevant, its equation. \code{null\_step} documents explicitly that it returns the \emph{unsigned} step $S$ and that $\Delta W=-S$.
-\item \textbf{Validation preprocessing.} Previously the standardisation statistics were computed on the whole training part, so the validation rows influenced the preprocessing used to evaluate them. They are now computed on the fitting rows only. Test splits were never affected. Effect: validation forgetting of ordinary SGD $0.046\to0.042$; the selected relaxation ($\text{tol}=0.03$, $\beta=0.3$), the feasible counts (9, 0, 0 of 25), the selected control $m=[1,0,1,1]$ and every test number are unchanged.
+\item \textbf{Validation protocol.} Two corrections, both confined to validation views; test splits were never affected. (a) Previously the standardisation statistics were computed on the whole training part, so the validation rows influenced the preprocessing used to evaluate them; they are now computed on the fitting rows only. Measured effect of (a) alone: validation forgetting of ordinary SGD $0.046\to0.042$, nothing else changed. (b) The 80/20 validation cut is now stratified by class (\code{stratified\_cut}); the 75/25 train/test permutation is deliberately untouched. Stratification changed the validation numbers and the degree-control result: validation forgetting of ordinary SGD $0.053$, 13 instead of 9 feasible candidates, selected $m=[1,0.1,1,1]$ instead of $[1,0,1,1]$, test $\Delta F=-0.006\,[-0.018,+0.007]$ instead of $-0.027\,[-0.041,-0.013]$, smallest test arrival accuracy $0.490$ instead of $0.510$. The relaxation selected on validation data ($\text{tol}=0.03$, $\beta=0.3$) and every test table are unchanged.
+\item \textbf{Replay-memory check.} \code{run()} now raises an explicit error when a class has fewer training examples than the requested memory, instead of failing inside \code{rng.choice}. It never resamples with replacement. Stratification does not remove this limit: validation split 103 still has only 96 fitting examples of digit 8, so memory 100 per class is unavailable there.
+\item \textbf{Input validation.} \code{poly\_features} (empty input, \code{degree}, \code{chunk}, shape), \code{expand}, \code{null\_basis} (\code{tol}, shapes, finiteness), \code{null\_step}, \code{free\_dim} and \code{train\_task} (counts, \code{n\_seen}, shapes, label range) validate their arguments and raise \code{ValueError} or \code{TypeError}; behaviour for valid inputs is unchanged.
 \item \textbf{Files.} The PDFs are no longer described as part of the package; they are built locally.
 \end{enumerate}
 
@@ -1028,10 +1031,10 @@ Null-space dimension at experience 3 as a function of the tolerance: 966 ($0.3$)
 
 \paragraph{Residual reference change at $\beta=0$.} For a random gradient at experience 5 ($n_{\text{ref}}=50$), $\|R\Delta W\|/\|RDG\|$ was $0.106$ with tol $=0.03$ and $9.2\times10^{-16}$ with tol $=10^{-10}$.
 
-\paragraph{Benchmark.} \code{benchmark.py} was run in full after two corrections made on review (the null-space threshold now follows the PR's $\text{tol}\cdot\max(\sigma_{\max},1)$, and the acquisition floor takes the minimum \emph{after} averaging over seeds and splits); its output is reproduced below. The test tables, the selected relaxation and the feasible counts are unchanged by the corrections; only the reported worst arrival accuracy moved ($0.477\to0.510$). A later refactoring (below) changed one printed number: the validation forgetting of ordinary SGD, $0.046\to0.042$.
+\paragraph{Benchmark.} \code{benchmark.py} was run in full after two corrections made on review (the null-space threshold now follows the PR's $\text{tol}\cdot\max(\sigma_{\max},1)$, and the acquisition floor takes the minimum \emph{after} averaging over seeds and splits); its output is reproduced below. The test tables and the selected relaxation are unchanged by the corrections; only the reported worst arrival accuracy moved ($0.477\to0.510$). A later revision of the validation protocol (fitting-set standardisation, then class-stratified validation cuts; see the changelog above) changed the validation forgetting of ordinary SGD ($0.046\to0.053$) and the degree-control result (13 feasible candidates, selected $m=[1,0.1,1,1]$, $\Delta F=-0.006\,[-0.018,+0.007]$, smallest arrival accuracy $0.490$); the output below is from that final protocol.
 
 \begin{lstlisting}[language={},basicstyle=\ttfamily\tiny,columns=fixed,breaklines=true,breakindent=0pt]
-[validation] relaxed selected: tol=0.03 beta=0.3 n_ref=50; ordinary forgetting=0.042
+[validation] relaxed selected: tol=0.03 beta=0.3 n_ref=50; ordinary forgetting=0.053
 
 [test, memory 60/class, 10 splits x 2 seeds]
 method       acc    forget  plasticity  newest  old
@@ -1062,8 +1065,8 @@ relaxed vs strategy_b: d_acc=+0.033 [+0.021,+0.046] d_forget=-0.004 [-0.016,+0.0
 relaxed: learning-rate frontier=+0.058 verdict=VALUE (acc CI lower bound > -0.01 and forgetting CI upper bound < 0)
 
 [degree control, memory 60/class, acquisition floor 0.5]
-ordinary: 9/25 validation candidates feasible; selected m[1,0,1,1]
-  test: d_acc=-0.004 [-0.018,+0.011] d_forget=-0.027 [-0.041,-0.013] min arrival acc 0.515 -> 0.510
+ordinary: 13/25 validation candidates feasible; selected m[1,0.1,1,1]
+  test: d_acc=-0.004 [-0.019,+0.010] d_forget=-0.006 [-0.018,+0.007] min arrival acc 0.515 -> 0.490
 strategy_b: 0/25 validation candidates feasible; selected None
 relaxed: 0/25 validation candidates feasible; selected None
 \end{lstlisting}

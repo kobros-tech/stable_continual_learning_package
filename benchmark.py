@@ -4,8 +4,8 @@
 """Validation-tuned benchmark: ordinary SGD, strategy_b, its relaxation, and diagonal degree control.
 
 Run: python benchmark.py
-All selection uses validation views (splits 100-103 cut from the training part, standardised with
-statistics of the fitting rows only); test numbers come from 10 independent splits x 2 seeds and
+All selection uses validation views (splits 100-103 cut class-stratified from the training part,
+standardised with statistics of the fitting rows only); test numbers come from 10 independent splits x 2 seeds and
 are compared pairwise. The degree-control study follows
 the selection rule of the PR (acquisition floor, Pareto front, accuracy - forgetting) for
 single-degree candidates only; the PR's combination step and Split-MNIST study are not repeated.
@@ -33,8 +33,8 @@ def load(split_seed, val=False):
     r"""Data for one split: train/test, or fit/validation when ``val`` is true.
 
     Thin wrapper around :func:`stable_cl.experiment.load_digits_features`.  In validation mode the
-    training part is cut 80/20 into fitting and validation rows *before* the standardisation
-    statistics are computed, and the statistics use the fitting rows only, so validation examples
+    training part is cut 80/20, stratified by class, into fitting and validation rows *before*
+    the standardisation statistics are computed, and the statistics use the fitting rows only, so validation examples
     never influence preprocessing.
 
     Parameters

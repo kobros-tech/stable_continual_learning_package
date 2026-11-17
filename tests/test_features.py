@@ -6,6 +6,7 @@
 from math import comb, sqrt
 
 import numpy as np
+import pytest
 
 from stable_cl import poly_features
 
@@ -50,3 +51,45 @@ def test_chunking_does_not_change_the_result():
     a, _ = poly_features(x, chunk=256)
     b, _ = poly_features(x, chunk=3)
     assert np.array_equal(a, b)
+
+
+def test_empty_input_gives_an_empty_feature_matrix_with_the_right_width():
+    Phi, deg = poly_features(np.empty((0, 4)))
+    full, full_deg = poly_features(np.ones((2, 4)))
+    assert Phi.shape == (0, full.shape[1]) and Phi.dtype == np.float64
+    assert np.array_equal(deg, full_deg)
+
+
+def test_degree_zero_has_only_the_constant_feature():
+    Phi, deg = poly_features(np.random.default_rng(0).normal(size=(3, 4)), degree=0)
+    assert Phi.shape == (3, 1) and np.all(Phi == 1.0) and deg.tolist() == [0]
+
+
+@pytest.mark.parametrize("chunk", [0, -1])
+def test_non_positive_chunk_is_rejected(chunk):
+    with pytest.raises(ValueError):
+        poly_features(np.ones((2, 3)), chunk=chunk)
+
+
+def test_negative_degree_is_rejected():
+    with pytest.raises(ValueError):
+        poly_features(np.ones((2, 3)), degree=-1)
+
+
+@pytest.mark.parametrize("bad", [2.0, True, "3", None])
+def test_non_integer_degree_or_chunk_is_rejected(bad):
+    with pytest.raises(TypeError):
+        poly_features(np.ones((2, 3)), degree=bad)
+    with pytest.raises(TypeError):
+        poly_features(np.ones((2, 3)), chunk=bad)
+
+
+@pytest.mark.parametrize("shape", [(5,), (2, 3, 4), (4, 0)])
+def test_wrong_input_dimensions_are_rejected(shape):
+    with pytest.raises(ValueError):
+        poly_features(np.ones(shape))
+
+
+def test_non_numeric_input_is_rejected():
+    with pytest.raises(TypeError):
+        poly_features(np.array([["a", "b"]]))

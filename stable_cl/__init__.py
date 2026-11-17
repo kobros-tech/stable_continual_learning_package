@@ -22,6 +22,7 @@ from .experiment import (
     demo,
     load_digits_features,
     run,
+    stratified_cut,
 )
 from .features import N_GROUPS, expand, poly_features
 from .optimization import diagonal_rates, free_dim, null_basis, null_step
@@ -43,5 +44,6 @@ __all__ = [
     "poly_features",
     "run",
     "softmax",
+    "stratified_cut",
     "train_task",
 ]

@@ -170,3 +170,95 @@ def test_invalid_strategy_and_beta_are_rejected(toy):
         train_task(*args, strategy="nope")
     with pytest.raises(ValueError):
         train_task(*args, beta=1.5)
+
+
+# ----------------------------------------------------------------- argument validation
+def _args(toy, **over):
+    """Valid positional arguments of train_task (second experience), with overrides."""
+    Phi, y, _, _, tdeg = toy
+    cur = np.flatnonzero(np.isin(y, (2, 3)))
+    old = np.flatnonzero(np.isin(y, (0, 1)))
+    a = {
+        "W": np.zeros((Phi.shape[1], 10)),
+        "X": Phi[cur],
+        "y": y[cur],
+        "Xm": Phi[old],
+        "ym": y[old],
+        "deg": tdeg,
+        "eta": 3.0,
+        "rng": np.random.default_rng(0),
+        "n_seen": 4,
+    }
+    a.update(over)
+    return a
+
+
+def test_valid_arguments_are_accepted(toy):
+    out = train_task(**_args(toy))
+    assert out.shape == (toy[0].shape[1], 10)
+
+
+@pytest.mark.parametrize(
+    "name, value", [("epochs", 0), ("bs", 0), ("n_ref", -1), ("epochs", -2)]
+)
+def test_counts_below_their_minimum_are_rejected(toy, name, value):
+    with pytest.raises(ValueError):
+        train_task(**_args(toy), **{name: value})
+
+
+@pytest.mark.parametrize("name", ["epochs", "bs", "n_ref"])
+@pytest.mark.parametrize("bad", [2.5, True, "3"])
+def test_non_integer_counts_are_rejected(toy, name, bad):
+    with pytest.raises(TypeError):
+        train_task(**_args(toy), **{name: bad})
+
+
+@pytest.mark.parametrize("n_seen", [0, -1, 11])
+def test_n_seen_outside_the_classifier_columns_is_rejected(toy, n_seen):
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, n_seen=n_seen))
+
+
+def test_n_ref_zero_is_allowed_and_makes_strategy_b_ordinary(toy):
+    a = train_task(**_args(toy), strategy="strategy_b", n_ref=0)
+    b = train_task(**_args(toy, rng=np.random.default_rng(0)))
+    assert np.array_equal(a, b)
+
+
+def test_feature_dimension_mismatches_are_rejected(toy):
+    Phi = toy[0]
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, X=Phi[:10, :-1], y=toy[1][:10]))
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, Xm=Phi[:10, :-1], ym=toy[1][:10]))
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, W=np.zeros((Phi.shape[1] + 1, 10))))
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, W=np.zeros(Phi.shape[1])))
+
+
+def test_label_problems_are_rejected(toy):
+    a = _args(toy)
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, y=a["y"][:-1]))  # length mismatch
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, ym=a["ym"][:-1]))
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, y=a["y"] + 5))  # labels >= n_seen
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, ym=a["ym"] - 1))  # negative label
+    with pytest.raises(TypeError):
+        train_task(**_args(toy, y=a["y"].astype(float)))
+
+
+def test_empty_current_data_and_short_degree_vector_are_rejected(toy):
+    a = _args(toy)
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, X=a["X"][:0], y=a["y"][:0]))
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, deg=a["deg"][:-1]))
+
+
+def test_validation_happens_before_the_zero_rate_shortcut(toy):
+    with pytest.raises(ValueError):
+        train_task(**_args(toy, n_seen=0), control=[0.0] * 4)

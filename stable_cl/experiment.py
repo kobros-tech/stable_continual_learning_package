@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from .features import N_GROUPS, expand, poly_features
+from .features import N_GROUPS, expand, poly_features, require_int
 from .optimization import diagonal_rates
 from .training import train_task
 
@@ -61,6 +61,13 @@ def run(Phi_tr, y_tr, Phi_te, y_te, deg, seed, eta, *, mem=100, **kw):
         Forwarded to :func:`~stable_cl.training.train_task` (``control``, ``strategy``, ``tol``,
         ``beta``, ``n_ref``, ``epochs``, ``bs``).
 
+    Raises
+    ------
+    ValueError
+        If ``mem`` is negative or any class has fewer than ``mem`` training examples.  The
+        replay memory is sampled *without* replacement and is never silently topped up with
+        repeated examples, because that would change the replay protocol.
+
     Returns
     -------
     dict
@@ -69,6 +76,14 @@ def run(Phi_tr, y_tr, Phi_te, y_te, deg, seed, eta, *, mem=100, **kw):
         ``null_dim`` and ``free_dim`` (per experience, ``None`` without a null basis) and
         ``acc_matrix`` (5x5 array, ``nan`` for :math:`j > t`).
     """
+    mem = require_int(mem, "mem", 0)
+    counts = np.bincount(y_tr, minlength=10)
+    short = {c: int(counts[c]) for c in range(10) if counts[c] < mem}
+    if short:
+        raise ValueError(
+            f"replay memory of {mem} examples per class exceeds the available training "
+            f"examples (class: count) {short}; use a smaller memory or more data"
+        )
     rng = np.random.default_rng(seed)
     memory = {
         c: rng.choice(np.flatnonzero(y_tr == c), mem, replace=False) for c in range(10)
@@ -123,6 +138,46 @@ def run(Phi_tr, y_tr, Phi_te, y_te, deg, seed, eta, *, mem=100, **kw):
     }
 
 
+def stratified_cut(y, idx, fraction=0.8):
+    r"""Split the examples ``idx`` into two parts with (almost) the same class proportions.
+
+    For every class :math:`c` that occurs among ``y[idx]``, with :math:`n_c` examples there, the
+    first :math:`\lfloor \text{fraction}\cdot n_c \rfloor` of them *in the order of* ``idx`` go to
+    the first part and the rest to the second.  Hence the first part holds exactly
+    :math:`\lfloor \text{fraction}\cdot n_c \rfloor` examples of each class, so per-class
+    counts differ from the exact proportion by less than one example, instead of varying at
+    random as with an unstratified cut.  Because the order of ``idx`` (a random permutation in
+    this package) is preserved, the cut is deterministic given the permutation.
+
+    Parameters
+    ----------
+    y : ndarray of int, shape (n,)
+        Labels of the whole dataset.
+    idx : ndarray of int, shape (m,)
+        Indices into ``y`` to be split.
+    fraction : float, default 0.8
+        Share of every class that goes to the first part, ``0 < fraction < 1``.
+
+    Returns
+    -------
+    first, second : ndarray of int
+        Disjoint index arrays whose union is ``idx``; each keeps the relative order of ``idx``.
+
+    Raises
+    ------
+    ValueError
+        If ``fraction`` is not strictly between 0 and 1.
+    """
+    if not 0.0 < fraction < 1.0:
+        raise ValueError("fraction must lie strictly between 0 and 1")
+    labels = y[idx]
+    first = np.zeros(len(idx), bool)
+    for c in np.unique(labels):
+        pos = np.flatnonzero(labels == c)
+        first[pos[: int(fraction * len(pos))]] = True
+    return idx[first], idx[~first]
+
+
 def load_digits_features(split_seed=0, validation=False):
     r"""Split the digits, standardise with *fitting-set* statistics only, and expand polynomially.
 
@@ -130,8 +185,13 @@ def load_digits_features(split_seed=0, validation=False):
     Let :math:`(\text{fit}, \text{eval})` be
 
     * ``(tr, te)`` when ``validation=False`` (test protocol), and
-    * ``(tr[:k], tr[k:])`` with :math:`k = \lfloor 0.8\,|tr| \rfloor` when ``validation=True``
-      (a validation view cut from the training part; the test part is not used).
+    * ``stratified_cut(y, tr, 0.8)`` when ``validation=True``: a *class-stratified* 80 / 20 cut
+      of the training part (see :func:`stratified_cut`; the test part is not used).
+
+    Only the validation cut is stratified.  The 75 / 25 train / test permutation is the same as
+    before, so every test-protocol result is unchanged.  Stratification equalises class counts
+    across validation splits but does not by itself guarantee that every class has as many
+    fitting examples as a large replay memory needs; :func:`run` checks that explicitly.
 
     The pixels, scaled by :math:`1/16`, are standardised with statistics computed on the *fit*
     rows only,
@@ -163,8 +223,7 @@ def load_digits_features(split_seed=0, validation=False):
     cut = int(0.75 * len(order))
     fit, ev = order[:cut], order[cut:]
     if validation:
-        k = int(0.8 * len(fit))
-        fit, ev = fit[:k], fit[k:]
+        fit, ev = stratified_cut(d.target, fit, 0.8)
     x = d.data / 16.0
     mu, sd = x[fit].mean(0), x[fit].std(0) + 1e-6
     x = (x - mu) / sd

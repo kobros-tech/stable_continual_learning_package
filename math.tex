@@ -135,9 +135,9 @@ Exact \texttt{strategy\_b} ($n_{\text{ref}}=3$) lowers forgetting but also newes
 validation) misses the predeclared accuracy non-inferiority bound ($-0.01$) at memory 60 and meets it at
 memory 100, where it also lies above the learning-rate frontier ($+0.058$).
 
-\paragraph{Degree control.} For ordinary SGD, 9 of 25 validation candidates were feasible and the rule
-selected $m=[1,0,1,1]$; on test splits (memory 60) accuracy changed by $-0.004\,[-0.018,+0.011]$ and
-forgetting by $-0.027\,[-0.041,-0.013]$, while the smallest mean arrival accuracy (the floor statistic, minimum over experiences of the mean over seeds and splits) moved from 0.515 to 0.510: lower forgetting at no measurable accuracy cost on this dataset, from one dataset and one selected candidate, so not evidence of a general improvement. For exact \texttt{strategy\_b} and the relaxed
+\paragraph{Degree control.} For ordinary SGD, 13 of 25 validation candidates were feasible and the rule
+selected $m=[1,0.1,1,1]$; on test splits (memory 60) accuracy changed by $-0.004\,[-0.019,+0.010]$ and
+forgetting by $-0.006\,[-0.018,+0.007]$ (both intervals contain $0$), while the smallest mean arrival accuracy (the floor statistic, minimum over experiences of the mean over seeds and splits) moved from 0.515 to 0.490, below the floor $0.5$ that held on validation data. There is therefore no evidence here that degree control lowers forgetting. With an earlier, unstratified validation cut the rule selected $m=[1,0,1,1]$ and the forgetting change was $-0.027\,[-0.041,-0.013]$; that did not survive stratifying the validation splits, so the selection is sensitive to the validation protocol and should not be quoted as a finding. For exact \texttt{strategy\_b} and the relaxed
 variant \emph{no} candidate was feasible (0 of 25), because even the all-ones baseline stays below the floor
 $0.5$ on some experience; by the rule nothing is selected. The floor was set with Split MNIST in view, not
 tuned for digits.
@@ -159,6 +159,7 @@ $r=\rank(D^{1/2}N)$ & \texttt{free\_dim} & \texttt{optimization.py}\\
 gradient $G$ and the update & \texttt{train\_task} & \texttt{training.py}\\
 $A_{t,j}$, accuracy, forgetting, plasticity & \texttt{run} & \texttt{experiment.py}\\
 standardisation with fitting-set statistics & \texttt{load\_digits\_features} & \texttt{experiment.py}\\
+class-stratified validation cut & \texttt{stratified\_cut} & \texttt{experiment.py}\\
 paired interval, Pareto front, selection rule & \texttt{paired\_ci}, \texttt{pareto}, \texttt{select} & \texttt{benchmark.py}\\
 \bottomrule\end{tabular}\end{center}
 

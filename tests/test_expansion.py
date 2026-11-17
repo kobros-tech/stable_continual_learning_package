@@ -4,6 +4,7 @@
 """Zero-initialised expansion keeps every logit unchanged."""
 
 import numpy as np
+import pytest
 
 from stable_cl import expand, poly_features
 
@@ -35,3 +36,20 @@ def test_expansion_preserves_logits_on_real_features():
     before = Phi[:, :old] @ W
     for count in (int((deg <= 2).sum()), len(deg)):
         assert np.allclose(Phi[:, :count] @ expand(W, count), before, atol=1e-12)
+
+
+def test_shrinking_the_classifier_is_rejected():
+    with pytest.raises(ValueError):
+        expand(np.ones((5, 2)), 4)
+
+
+@pytest.mark.parametrize("bad", [5.0, True, "6"])
+def test_non_integer_count_is_rejected(bad):
+    with pytest.raises(TypeError):
+        expand(np.ones((5, 2)), bad)
+
+
+@pytest.mark.parametrize("shape", [(5,), (2, 3, 4)])
+def test_weights_must_be_two_dimensional(shape):
+    with pytest.raises(ValueError):
+        expand(np.ones(shape), 9)

@@ -29,6 +29,38 @@ import numpy as np
 from .features import N_GROUPS
 
 
+def _check_matrix_and_rates(M, d, what):
+    r"""Validate a ``(p, q)`` matrix against a rate vector of length ``p``.
+
+    Parameters
+    ----------
+    M : ndarray
+        Matrix whose first dimension must equal ``len(d)``.
+    d : ndarray
+        Diagonal rates.
+    what : str
+        Name of ``M`` used in error messages.
+
+    Raises
+    ------
+    ValueError
+        If ``M`` is not 2-D, ``d`` is not 1-D of matching length, or either contains
+        non-finite values or ``d`` has negative entries.
+    """
+    if np.ndim(M) != 2:
+        raise ValueError(f"{what} must be 2-D, got {np.ndim(M)}-D")
+    if np.ndim(d) != 1 or len(d) != np.shape(M)[0]:
+        raise ValueError(
+            f"d must be 1-D with len(d) == {what}.shape[0] == {np.shape(M)[0]}"
+        )
+    if (
+        not np.isfinite(M).all()
+        or not np.isfinite(d).all()
+        or (np.asarray(d) < 0).any()
+    ):
+        raise ValueError(f"{what} must be finite and d finite and non-negative")
+
+
 def _real(v, what):
     r"""Convert ``v`` to a float64 array, rejecting non-real input *before* any cast.
 
@@ -162,8 +194,17 @@ def null_basis(R, d, tol=1e-10):
     (*exact*); with ``tol > 0`` large it additionally keeps directions that :math:`A` only weakly
     sees (*relaxed*), and then :math:`\|A N\|_2 \le \text{tol}\cdot\max(\sigma_1, 1)`.
 
+    ``tol = 0`` is the strictest setting: every singular value that is not *exactly* zero counts
+    as non-null, so round-off-level singular values of a rank-deficient :math:`A` are kept out
+    of the basis and the result can be smaller than for ``tol = 1e-10``.  Directions with
+    singular values below the threshold (very small :math:`\sigma_i`) are treated as null, which
+    is what "numerical null space" means.  Repeated singular values are harmless: the
+    individual columns of :math:`N` are then not unique, but :math:`P = N N^\top` is.
+
     Edge cases: with no reference rows (``R.shape[0] == 0``) the whole space is free and the
-    identity is returned; if :math:`A` has full column rank the result has zero columns.
+    identity is returned; if :math:`A` has full column rank the result has zero columns; if
+    every rate is zero then :math:`A = 0`, all singular values vanish and a full orthonormal
+    basis (:math:`P = I`) is returned.
 
     Parameters
     ----------
@@ -178,7 +219,23 @@ def null_basis(R, d, tol=1e-10):
     -------
     ndarray, shape (p, p - k)
         Matrix :math:`N` with :math:`N^\top N = I`.
+
+    Raises
+    ------
+    ValueError
+        If ``tol`` is negative, NaN or infinite; if ``R`` is not a finite 2-D array with at
+        least one column; or if ``d`` is not a finite non-negative vector of length ``R.shape[1]``.
+    TypeError
+        If ``tol`` is not a real number.
     """
+    tol = _real(tol, "tol")
+    if tol.ndim != 0 or not np.isfinite(tol) or tol < 0:
+        raise ValueError("tol must be a finite non-negative scalar")
+    tol = float(tol)
+    R, d = np.asarray(R), np.asarray(d)
+    if np.ndim(R) == 2 and R.shape[1] < 1:
+        raise ValueError("R must have at least one column")
+    _check_matrix_and_rates(R.T, d, "R.T")
     if R.shape[0] == 0:
         return np.eye(R.shape[1])
     _, s, vt = np.linalg.svd(R * np.sqrt(d), full_matrices=True)
@@ -221,10 +278,14 @@ def null_step(G, N, d, beta=0.0):
     Raises
     ------
     ValueError
-        If ``beta`` is outside ``[0, 1]``.
+        If ``beta`` is outside ``[0, 1]``, or the shapes of ``G`` (p, K), ``N`` (p, q) and
+        ``d`` (p,) are incompatible.
     """
     if not 0.0 <= beta <= 1.0:
         raise ValueError("beta must lie in [0, 1]")
+    _check_matrix_and_rates(G, d, "G")
+    if np.ndim(N) != 2 or np.shape(N)[0] != len(d):
+        raise ValueError("N must be 2-D with N.shape[0] == len(d)")
     root = np.sqrt(d)[:, None]
     rg = root * G
     return root * (beta * rg + (1.0 - beta) * (N @ (N.T @ rg)))
@@ -252,5 +313,11 @@ def free_dim(N, d):
     -------
     int
         :math:`r`, or 0 if ``N`` has no columns.
+
+    Raises
+    ------
+    ValueError
+        If ``N`` is not 2-D or ``N.shape[0] != len(d)``.
     """
+    _check_matrix_and_rates(N, d, "N")
     return int(np.linalg.matrix_rank(np.sqrt(d)[:, None] * N)) if N.size else 0
