@@ -113,6 +113,9 @@ def poly_features(x, degree=3, chunk=256):
         raise ValueError(f"x must be 2-D with at least one column, got shape {x.shape}")
     if x.dtype.kind not in "iuf":
         raise TypeError("x must contain real numbers")
+    # Powers must be computed in float64: integer inputs would otherwise wrap around silently
+    # (e.g. 10_000_000 ** 3 > 2 ** 63) and low-precision floats would lose accuracy or overflow.
+    x = x.astype(np.float64, copy=False)
     degree = require_int(degree, "degree", 0)
     chunk = require_int(chunk, "chunk", 1)
     n = x.shape[1]

@@ -4,6 +4,7 @@
 """Benchmark statistics and selection rules (the full benchmark itself is not run here)."""
 
 import numpy as np
+import pytest
 from scipy import stats
 
 import benchmark as B
@@ -94,3 +95,21 @@ def test_table_returns_one_entry_per_split_for_every_configuration(monkeypatch, 
     out = B.table(cfgs, (0, 1, 2), (0,), 20, False)
     assert set(out) == set(cfgs)
     assert all(len(out[n]["acc"]) == 3 and len(out[n]["immediate"]) == 3 for n in cfgs)
+
+
+def test_table_accepts_a_generator_of_seeds_for_every_configuration_and_split(
+    monkeypatch, toy
+):
+    monkeypatch.setattr(B, "load", lambda split, validation: toy)
+    cfgs = {"ordinary": ({}, 1.0, None), "sb": ({"strategy": "strategy_b"}, 1.0, None)}
+    from_tuple = B.table(cfgs, (0, 1), (0, 1), 20, False)
+    from_generator = B.table(cfgs, (0, 1), (s for s in (0, 1)), 20, False)
+    assert (
+        from_generator == from_tuple
+    )  # later splits/configs must still see both seeds
+
+
+def test_table_rejects_empty_seeds(monkeypatch, toy):
+    monkeypatch.setattr(B, "load", lambda split, validation: toy)
+    with pytest.raises(ValueError, match="seeds"):
+        B.table({"ordinary": ({}, 1.0, None)}, (0,), iter(()), 20, False)

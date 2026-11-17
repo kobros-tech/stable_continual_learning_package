@@ -100,7 +100,8 @@ def table(configs, splits, seeds, mem, validation):
     splits : iterable of int
         Split seeds; each split is loaded once and shared by all configurations (paired design).
     seeds : iterable of int
-        Training seeds averaged within each split.
+        Training seeds averaged within each split; must be non-empty.  Materialised once, so a
+        generator is safe.
     mem : int
         Replay memory per class.
     validation : bool
@@ -110,7 +111,15 @@ def table(configs, splits, seeds, mem, validation):
     -------
     dict
         ``name -> metric -> list`` with one entry per split (each already a mean over seeds).
+
+    Raises
+    ------
+    ValueError
+        If ``seeds`` is empty.
     """
+    seeds = tuple(seeds)  # an iterator would be exhausted by the first evaluate() call
+    if not seeds:
+        raise ValueError("seeds must contain at least one training seed")
     out = {n: {k: [] for k in (*METRICS, "immediate")} for n in configs}
     for split in splits:
         data = load(split, validation)

@@ -93,3 +93,29 @@ def test_wrong_input_dimensions_are_rejected(shape):
 def test_non_numeric_input_is_rejected():
     with pytest.raises(TypeError):
         poly_features(np.array([["a", "b"]]))
+
+
+# (dtype, magnitude): large enough that cubing in the input dtype would overflow or wrap.
+@pytest.mark.parametrize(
+    "dtype, big",
+    [
+        (np.int64, 10_000_000),  # 1e21 > 2**63
+        (np.uint32, 4_000_000),  # 6.4e19 > 2**64
+        (np.int32, 2_000),  # 8e9 > 2**31
+        (np.float32, 1e15),  # 1e45 > float32 max
+        (np.float16, 5_000),  # 1.25e11 > float16 max
+    ],
+)
+def test_non_float64_inputs_are_computed_in_float64(dtype, big):
+    x = np.array([[big, 3], [big // 2, 7]]).astype(dtype)
+    Phi, deg = poly_features(x)
+    expected, expected_deg = poly_features(x.astype(np.float64))
+    assert Phi.dtype == np.float64
+    assert np.isfinite(Phi).all()
+    assert np.array_equal(Phi, expected) and np.array_equal(deg, expected_deg)
+
+
+def test_integer_cube_does_not_wrap_around():
+    Phi, _ = poly_features(np.array([[10_000_000]], dtype=np.int64))
+    # n = 1: one monomial per degree, s_k = 1, so the features are 1, x, x^2, x^3.
+    assert np.allclose(Phi[0], [1.0, 1e7, 1e14, 1e21])
