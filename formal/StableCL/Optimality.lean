@@ -17,7 +17,7 @@ The sum is restricted to `S` explicitly (`penalty` uses `if 0 < d j`); it does n
 `x / 0 = 0`. Uniqueness is claimed **over `F`**, not over all of `ℝ^{p×K}`: `J` does not penalise
 rows outside `S`, so only the constraint `Z_{S^c} = 0` makes the minimiser unique.
 
-**Hypotheses.** `hd : d ≥ 0` (A0); `hN : NᵀN = I` (A3); `hAN : A N = 0` (A2, `A = R D^{1/2}`);
+**Hypotheses.** `hd : d ≥ 0` (A0); `hAN : A N = 0` (A2, `A = R D^{1/2}`);
 and **`hcomp` (A5): `N` spans all of `null(A)`**, i.e. `N Nᵀ V = V` whenever `A V = 0`. A5 is new
 relative to M1-M3 and is the `tol → 0` hypothesis of `math.tex` Prop. 1 ("`P` is the orthogonal
 projector onto `null(A)`"). Without it the claim is false (a smaller basis gives a feasible but
@@ -161,7 +161,6 @@ theorem isqrt_mem_ker (R : Matrix m p ℝ) (d : p → ℝ) {Z : Matrix p K ℝ}
 /-- The key identity: `J(Z) = J(Z*) + ½ ‖D^{-1/2} Z - D^{-1/2} Z*‖²` for feasible `Z`,
 where `Z*` is any feasible point whose `D^{-1/2}`-image on `S` is `-P u`. -/
 theorem objective_expand (R : Matrix m p ℝ) (d : p → ℝ) (G : Matrix p K ℝ) (N : Matrix p q ℝ)
-    (hN : Nᵀ * N = 1)
     (hcomp : ∀ V : Matrix p K ℝ, R * sqrtDiag d * V = 0 → N * Nᵀ * V = V)
     {Z Zs : Matrix p K ℝ} (hZ : Feasible R d Z) (hZs : Feasible R d Zs)
     (hVs : ∀ j, 0 < d j → ∀ k,
@@ -195,7 +194,7 @@ theorem objective_expand (R : Matrix m p ℝ) (d : p → ℝ) (G : Matrix p K �
 /-- **Prop. 1(c).** `ΔW = -nullStep d N G 0` is feasible, minimises `J` over the feasible set,
 and is the only feasible minimiser. -/
 theorem strictStep_unique_minimiser (R : Matrix m p ℝ) (d : p → ℝ) (N : Matrix p q ℝ)
-    (G : Matrix p K ℝ) (hd : ∀ j, 0 ≤ d j) (hN : Nᵀ * N = 1)
+    (G : Matrix p K ℝ) (hd : ∀ j, 0 ≤ d j)
     (hAN : R * sqrtDiag d * N = 0)
     (hcomp : ∀ V : Matrix p K ℝ, R * sqrtDiag d * V = 0 → N * Nᵀ * V = V) :
     Feasible R d (-(nullStep d N G 0)) ∧
@@ -210,12 +209,12 @@ theorem strictStep_unique_minimiser (R : Matrix m p ℝ) (d : p → ℝ) (N : Ma
     rw [Matrix.mul_neg, nullStep_zero_eq, Matrix.neg_apply, isqrt_sqrtDiag_apply d h]
   refine ⟨hZs, ?_, ?_⟩
   · intro Z hZ
-    have h := objective_expand R d G N hN hcomp hZ hZs hVs
+    have h := objective_expand R d G N hcomp hZ hZs hVs
     have h0 := frob_self_nonneg
       (isqrtDiag d * Z - isqrtDiag d * (-(nullStep d N G 0)))
     linarith
   · intro Z hZ heq
-    have h := objective_expand R d G N hN hcomp hZ hZs hVs
+    have h := objective_expand R d G N hcomp hZ hZs hVs
     have hW : frob (isqrtDiag d * Z - isqrtDiag d * (-(nullStep d N G 0)))
         (isqrtDiag d * Z - isqrtDiag d * (-(nullStep d N G 0))) = 0 := by
       linarith
