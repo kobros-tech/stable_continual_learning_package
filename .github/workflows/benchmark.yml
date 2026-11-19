@@ -1,0 +1,132 @@
+# Runs the M7 benchmark on a clean checkout and uploads everything a reviewer needs as artifacts.
+# Separate from python.yml on purpose: the benchmark takes tens of minutes, the unit tests seconds.
+# Results are Observed evidence (digits, one protocol); see docs/benchmark_protocol.md.
+name: benchmark
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "benchmark.py"
+      - "stable_cl/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmark.yml"
+  push:
+    branches: [main]
+    paths:
+      - "benchmark.py"
+      - "stable_cl/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmark.yml"
+
+# A newer push to the same ref makes the older run redundant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # The revision whose code is benchmarked. For pull requests this is the PR head, not the
+  # synthetic merge commit that actions/checkout would use by default, so the recorded commit
+  # is the one a reviewer sees on GitHub.
+  BENCH_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BENCH_SHA }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install numpy scipy scikit-learn
+
+      # Outputs go outside the repository. Creating `results/` inside it before the run would make
+      # the tree dirty and the provenance would then record `dirty: true`.
+      - name: Prepare output directory outside the working tree
+        run: |
+          mkdir -p "$RUNNER_TEMP/bench"
+          git status --porcelain
+          test -z "$(git status --porcelain)"
+
+      - name: Run benchmark
+        run: |
+          python -u benchmark.py --out "$RUNNER_TEMP/bench/benchmark_raw.json" \
+            | tee "$RUNNER_TEMP/bench/benchmark_stdout.txt"
+
+      # The raw file is only evidence if it came from this exact, unmodified revision.
+      - name: Check provenance (clean tree, expected commit)
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          raw = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "bench", "benchmark_raw.json")))
+          prov = raw["provenance"]
+          expected = os.environ["BENCH_SHA"]
+          print(json.dumps(prov, indent=1))
+          if prov["dirty"] is not False:
+              sys.exit(f"provenance.dirty is {prov['dirty']!r}, expected False")
+          if prov["commit"] != expected:
+              sys.exit(f"provenance.commit {prov['commit']} != {expected}")
+          PY
+
+      # `--report` must reprint exactly what the run printed, from the raw file alone.
+      - name: Reprint the report from the raw file and compare with the run's output
+        run: |
+          cd "$RUNNER_TEMP/bench"
+          python "$GITHUB_WORKSPACE/benchmark.py" --report benchmark_raw.json > benchmark_report.txt
+          sed '/^raw results written to/d' benchmark_stdout.txt > stdout_without_footer.txt
+          diff -B stdout_without_footer.txt benchmark_report.txt
+          rm stdout_without_footer.txt
+
+      - name: Record the environment
+        run: |
+          {
+            echo "revision: $BENCH_SHA"
+            echo "event: ${{ github.event_name }}"
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            python --version
+            python -m pip freeze
+          } > "$RUNNER_TEMP/bench/environment.txt"
+
+      - name: Show the report in the job summary
+        run: |
+          {
+            echo "### Benchmark report (revision \`$BENCH_SHA\`)"
+            echo
+            echo "Observed evidence: \`digits\`, one protocol. Raw per-split results are in the"
+            echo "\`benchmark-${BENCH_SHA}\` artifact."
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/bench/benchmark_report.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ env.BENCH_SHA }}
+          path: |
+            ${{ runner.temp }}/bench/benchmark_raw.json
+            ${{ runner.temp }}/bench/benchmark_stdout.txt
+            ${{ runner.temp }}/bench/benchmark_report.txt
+            ${{ runner.temp }}/bench/environment.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      # If the run failed part-way, whatever was printed is still useful to a reviewer.
+      - name: Upload partial output after a failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-failed-${{ env.BENCH_SHA }}
+          path: ${{ runner.temp }}/bench/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -34,7 +34,7 @@ Requires Python 3.11 or newer with NumPy, SciPy and scikit-learn (`pytest` for t
 python -m pytest                  # test suite (seconds)
 python -m stable_cl    # demo: three methods on one split
 python benchmark.py --out results/benchmark_raw.json  # several minutes on one CPU core
-python benchmark.py --report results/benchmark_raw.json  # recompute comparisons from raw results
+python benchmark.py --report results/benchmark_raw.json  # reprint the full report from raw results
 ```
 
 One test compares a `strategy_b` step with the PR implementation. It is skipped, with the reason
@@ -42,6 +42,10 @@ shown by `pytest -rs`, unless the importable `polynomial_cl` is the `diagonal_co
 (it needs `apply_degree_control`, `step_scale_for`, `degree_of_feature`, `fit_task`,
 `null_space_basis`), e.g.
 `PYTHONPATH=/path/to/polynomial_cl_core-diagonal_control/src python -m pytest tests/test_pr_parity.py`.
+
+The `benchmark` workflow runs the benchmark on a clean checkout and uploads the raw results,
+console output, regenerated report and environment as a downloadable artifact; see
+`docs/benchmark_protocol.md`.
 
 ## Build the PDFs
 
