@@ -27,9 +27,14 @@ document).
 | M1        | `StableCL/Expansion.lean`    | `[W; 0]` expansion preserves logits                        |
 | M2        | `StableCL/DegreeControl.lean`| zero effective rate freezes a row; prefix stability        |
 | M3        | `StableCL/RefPreservation.lean` | `A N = 0` implies `R ΔW = 0`, also over a whole experience |
+| M4a       | `StableCL/Descent.lean`      | descent identity, non-ascent, strict descent, stall iff, `β = 1` is SGD (DRAFT) |
+| M4b       | `StableCL/Relaxed.lean`      | `‖R ΔW + β R D G‖_F ≤ (1-β) τ ‖D^{1/2} G‖_F` (DRAFT)       |
+| M5        | `StableCL/Optimality.lean`   | strict step is the unique constrained minimiser (DRAFT)    |
 
-M4 (descent, relaxed residual bound), M5 (constrained minimiser), M6 (numerical checks of the
-null-basis assumptions) and M7 (benchmarks) are out of scope here and not started.
+**M4 and M5 are drafted but NOT compiled** (`Frobenius`, `Descent`, `Relaxed`, `Optimality`).
+They were written without a Lean toolchain. The matrix, trace and square-root lemmas they use
+were checked by name and signature against the source of Mathlib `v4.36.0`, but nothing was
+elaborated. Treat them as unproven until CI is green. M6 (numerical checks) and M7 (benchmarks) are not Lean work.
 
 ## Building locally
 

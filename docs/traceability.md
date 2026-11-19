@@ -17,11 +17,12 @@ The `formal` workflow runs Lean only; pytest results are separate evidence.
 
 | ID  | Assumption                                                          | Used by           | Checked by (pytest)                                                                                                                                             |
 | --- | ------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A0  | Rates are nonnegative: `η_g ≥ 0` and `m_g ≥ 0`, so `d_j ≥ 0`; the implementation additionally restricts `m_g ≤ 1` | M1-M3 do not need it; M4, M5 (planned) do | `test_invalid_control_factors_are_rejected` (`m`), `test_negative_base_rates_are_rejected` (`η`), `test_incompatible_null_basis_inputs_are_rejected` (negative `d`) |
+| A0  | Rates are nonnegative: `η_g ≥ 0` and `m_g ≥ 0`, so `d_j ≥ 0`; the implementation additionally restricts `m_g ≤ 1` | M1-M3 do not need it; M4, M5 (drafted) do | `test_invalid_control_factors_are_rejected` (`m`), `test_negative_base_rates_are_rejected` (`η`), `test_incompatible_null_basis_inputs_are_rejected` (negative `d`) |
 | A1  | Old features are a prefix of the expanded feature vector; old features keep their degree | M1, M2 (prefix)   | `test_lower_degree_features_are_a_prefix_of_higher_degree_features`, `test_features_are_ordered_by_degree`, `test_rates_are_prefix_stable`                       |
 | A2  | `A N = 0` for `A = R D^{1/2}` (exact null basis)                    | M3                | `test_null_basis_is_orthonormal_and_annihilated_by_A` (residual below `1e-9`, so the guarantee holds up to that tolerance, not exactly)                          |
-| A3  | `N^T N = I`                                                         | M4, M5 (planned)  | same test                                                                                                                                                       |
-| A4  | `‖A N‖₂ ≤ τ` for the relaxed basis                                  | M4 (planned)      | `test_relaxed_logit_change_respects_the_spectral_bound` (indirect: it checks the consequence)                                                                    |
+| A3  | `N^T N = I`                                                         | M4, M5 (drafted)  | same test                                                                                                                                                       |
+| A4  | `‖A N‖₂ ≤ τ` for the relaxed basis, stated in Lean as `‖(A N) X‖_F ≤ τ ‖X‖_F` for all `X` | M4b (drafted) | `test_relaxed_logit_change_respects_the_spectral_bound` (indirect: it checks the consequence)                                                                    |
+| A5  | `N` spans all of `null(A)`: `N N^T V = V` whenever `A V = 0` (the `tol → 0` hypothesis of Prop 1) | M5 (drafted) | `test_exact_null_basis_spans_the_whole_null_space`, `test_exact_null_basis_is_complete_for_rank_deficient_references` (dimension equals `p - rank A`; with A2 and A3 this gives completeness) |
 
 ## Claims
 
@@ -32,9 +33,10 @@ The `formal` workflow runs Lean only; pytest results are separate evidence.
 | `m_g = 0` freezes degree `g`                           | §2              | M2 `nullStep_frozen_of_control_zero` (compiled)                 | `test_zero_factor_freezes_a_degree`                                                                    | n/a      |
 | Rates are prefix-stable under expansion (needs A1)     | §2              | M2 `rate_prefix_stable` (compiled)                              | `test_rates_are_prefix_stable`                                                                         | n/a      |
 | Exact step preserves reference logits (needs A2)       | Prop 1(a)       | M3 `ref_preserved_exact`, `ref_preserved_run` (compiled)       | `test_exact_step_leaves_reference_logits_unchanged`                                                    | n/a      |
-| Strict step is non-ascent, `⟨G,ΔW⟩ = -‖Pu‖²`           | Prop 1(d)       | M4, not started                                                | `test_step_is_a_descent_direction_with_the_stated_value`                                               | n/a      |
-| Relaxed residual: `‖RΔW + βAu‖_F ≤ (1-β)τ‖u‖_F` (needs A3, A4) | Prop 2(c) | M4, not started                                                | `test_relaxed_logit_change_respects_the_spectral_bound`                                                | n/a      |
-| Strict step is the unique constrained minimiser        | Prop 1(c)       | M5, not started                                                | `test_exact_step_is_the_constrained_minimiser`                                                         | n/a      |
+| Strict step is non-ascent, `⟨G,ΔW⟩ = -‖Pu‖²`; stalls iff `Pu = 0` (needs A3) | Prop 1(d) | M4a `nullStep_inner`, `deltaW_inner`, `deltaW_inner_nonpos`, `nullStep_zero_eq_zero_iff` (drafted, not compiled) | `test_step_is_a_descent_direction_with_the_stated_value`                                               | n/a      |
+| Relaxed step is non-ascent, strictly descending if `β > 0`, `u ≠ 0`; `β = 1` is rate-weighted SGD | Prop 2(a), 2(b) | M4a `deltaW_inner_nonpos`, `deltaW_inner_neg`, `nullStep_one` (drafted, not compiled) | `test_beta_one_is_ordinary_rate_weighted_sgd`, `test_step_is_a_descent_direction_with_the_stated_value` | n/a |
+| Relaxed residual: `‖RΔW + βAu‖_F ≤ (1-β)τ‖u‖_F` (needs A0, A3, A4) | Prop 2(c) | M4b `ref_change_decomp`, `ref_residual_eq`, `ref_residual_sq`, `ref_residual_norm` (drafted, not compiled) | `test_relaxed_logit_change_respects_the_spectral_bound`                                                | n/a      |
+| Strict step is the unique constrained minimiser over the feasible set (needs A0, A2, A3, A5) | Prop 1(c) | M5 `strictStep_unique_minimiser`, `objective_expand` (drafted, not compiled) | `test_exact_step_is_the_constrained_minimiser`                                                         | n/a      |
 | Strict step lowers forgetting                          | §5              | not a theorem                                                  | n/a                                                                                                    | supported on `digits`; also lowers newest-task accuracy |
 | Relaxed variant improves the accuracy/forgetting trade-off | §5          | not a theorem                                                  | n/a                                                                                                    | meets the accuracy bound at memory 100, misses it at 60 |
 | Degree control lowers forgetting                       | §5              | not a theorem                                                  | n/a                                                                                                    | no evidence under the stratified protocol |
@@ -56,3 +58,15 @@ The `formal` workflow runs Lean only; pytest results are separate evidence.
   `m_g ≥ 0` give `d_j ≥ 0`, and `sqrtDiag_mul_self` records that `D^{1/2} D^{1/2} = D` needs
   it; both compiled in CI on PR #3 and are in the axiom audit. Theorems that use
   `D = D^{1/2} D^{1/2}` (planned M4, M5) must take `∀ j, 0 ≤ d j` as an explicit hypothesis.
+- M4 and M5 are drafted and not compiled; their rows say so. They follow `math.tex` Prop 1(c),
+  1(d), 2(a), 2(b), 2(c). Not covered by any Lean theorem: Prop 1(e) (rank of the free space)
+  and Prop 1(f) (parity with `polynomial_cl`; pytest only).
+- Spectral bound (A4). Lean takes `‖A N‖₂ ≤ τ` as a hypothesis in its defining form. That the
+  SVD threshold gives `‖A N‖₂ = σ_{k+1} ≤ τ` is not formalised; it is checked numerically.
+- Completeness (A5). Exact reference preservation (M3) needs only `A N = 0`. Constrained
+  optimality (M5) additionally needs that `N` is not a proper subspace of `null(A)`; with a
+  smaller basis the step is feasible but not the minimiser.
+- Uniqueness in M5 is over the feasible set `{Z : Z_j = 0 for d_j = 0, R Z = 0}`, not over all
+  of `R^{p x K}`; the objective does not penalise rows outside `S`.
+- The `descent` results concern the linearised loss (directional derivative) only. They do not
+  imply that a finite step decreases the nonlinear loss.

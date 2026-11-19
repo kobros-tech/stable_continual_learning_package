@@ -25,6 +25,25 @@ def test_null_basis_is_orthonormal_and_annihilated_by_A(setup):
     assert np.abs((R * np.sqrt(d)) @ N).max() < 1e-9
 
 
+def test_exact_null_basis_spans_the_whole_null_space(setup):
+    # Assumption A5 of the Lean M5 theorem: N Nᵀ is the projector onto null(A), i.e. N is
+    # orthonormal, annihilated by A, and has dimension p - rank(A).
+    R, _, d, N = setup
+    A = R * np.sqrt(d)
+    assert N.shape[1] == A.shape[1] - np.linalg.matrix_rank(A)
+
+
+def test_exact_null_basis_is_complete_for_rank_deficient_references(rng, deg, rates):
+    eta, m = rates
+    d = diagonal_rates(eta, deg, m)
+    R = rng.normal(size=(8, len(deg)))
+    R[4:] = R[:4]  # repeated reference rows: rank(A) <= 4
+    A = R * np.sqrt(d)
+    N = null_basis(R, d)
+    assert N.shape[1] == A.shape[1] - np.linalg.matrix_rank(A)
+    assert np.abs(A @ N).max() < 1e-9
+
+
 def test_exact_step_leaves_reference_logits_unchanged(setup):
     R, G, d, N = setup
     assert np.abs(R @ null_step(G, N, d, 0.0)).max() < 1e-9
