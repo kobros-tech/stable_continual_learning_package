@@ -10,7 +10,8 @@ M0-M3 **built in CI on PR #3** and M4-M5 **built in CI on PR #5**: `lake build` 
 axiom audit in `Audit.lean` passed, with Lean and Mathlib pinned to `v4.36.0` and the manifest
 committed. The PR #3 build includes
 `rate_nonneg` and `sqrtDiag_mul_self` (`Definitions.lean`), which make the nonnegative-rate domain
-explicit. The `formal` workflow runs Lean only; the Python tests are separate evidence.
+explicit. The `formal` workflow runs Lean only; the Python tests run in the separate `python` workflow
+(pytest and pre-commit) and are separate evidence.
 
 Two different checks are involved, and a green build gives only the first:
 

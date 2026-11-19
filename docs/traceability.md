@@ -12,7 +12,8 @@ Lean status: "compiled" means `lake build` and the axiom audit passed in CI (M0-
 PR #5). It means
 Lean accepted the statement and proof. That the statement expresses the intended mathematics is a
 separate question, answered by the mapping in this document and by review against `math.tex`.
-The `formal` workflow runs Lean only; pytest results are separate evidence.
+The `formal` workflow runs Lean only; pytest runs in the separate `python` workflow, and its
+results are separate evidence.
 
 ## Assumptions the Lean theorems take from the implementation
 
