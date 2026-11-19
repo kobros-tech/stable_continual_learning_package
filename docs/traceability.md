@@ -11,13 +11,13 @@ Three evidence levels are tracked separately and are not interchangeable:
 Lean status: "compiled" means `lake build` and the axiom audit passed in CI on PR #3. It means
 Lean accepted the statement and proof. That the statement expresses the intended mathematics is a
 separate question, answered by the mapping in this document and by review against `math.tex`.
-Items marked "added after review" have not yet been through a CI run.
+The `formal` workflow runs Lean only; pytest results are separate evidence.
 
 ## Assumptions the Lean theorems take from the implementation
 
 | ID  | Assumption                                                          | Used by           | Checked by (pytest)                                                                                                                                             |
 | --- | ------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A0  | Rates are nonnegative: `η_g ≥ 0`, `0 ≤ m_g ≤ 1`, so `d_j ≥ 0` | M1-M3 do not need it; M4, M5 (planned) do | `test_invalid_control_factors_are_rejected` (`m`), `test_negative_base_rates_are_rejected` (`η`, added after review), `test_incompatible_null_basis_inputs_are_rejected` (negative `d`) |
+| A0  | Rates are nonnegative: `η_g ≥ 0` and `m_g ≥ 0`, so `d_j ≥ 0`; the implementation additionally restricts `m_g ≤ 1` | M1-M3 do not need it; M4, M5 (planned) do | `test_invalid_control_factors_are_rejected` (`m`), `test_negative_base_rates_are_rejected` (`η`), `test_incompatible_null_basis_inputs_are_rejected` (negative `d`) |
 | A1  | Old features are a prefix of the expanded feature vector; old features keep their degree | M1, M2 (prefix)   | `test_lower_degree_features_are_a_prefix_of_higher_degree_features`, `test_features_are_ordered_by_degree`, `test_rates_are_prefix_stable`                       |
 | A2  | `A N = 0` for `A = R D^{1/2}` (exact null basis)                    | M3                | `test_null_basis_is_orthonormal_and_annihilated_by_A` (residual below `1e-9`, so the guarantee holds up to that tolerance, not exactly)                          |
 | A3  | `N^T N = I`                                                         | M4, M5 (planned)  | same test                                                                                                                                                       |
@@ -54,5 +54,5 @@ Items marked "added after review" have not yet been through a CI run.
   defined for every real `d`, while the Python code rejects negative rates. The M1-M3 theorems
   hold for all real `d` and do not use `d ≥ 0`. `rate_nonneg` records that `η_g ≥ 0` and
   `m_g ≥ 0` give `d_j ≥ 0`, and `sqrtDiag_mul_self` records that `D^{1/2} D^{1/2} = D` needs
-  it; both were added after review and are not yet through a CI run. Theorems that use
+  it; both compiled in CI on PR #3 and are in the axiom audit. Theorems that use
   `D = D^{1/2} D^{1/2}` (planned M4, M5) must take `∀ j, 0 ≤ d j` as an explicit hypothesis.

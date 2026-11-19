@@ -1,5 +1,4 @@
--- STATUS: compiled in CI on PR #3. The two `Definitions.lean` entries added after review
--- are DRAFT until CI runs.
+-- STATUS: compiled in CI on PR #3; every theorem listed below passes the axiom audit.
 -- Copyright (c) 2026 Mohamed Alkobrosli
 -- SPDX-License-Identifier: MIT
 import Lean

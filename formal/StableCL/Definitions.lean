@@ -1,5 +1,4 @@
--- STATUS: the M1-M3 content compiled in CI on PR #3. `rate_nonneg` and
--- `sqrtDiag_mul_self` were added afterwards in response to review: DRAFT until CI runs.
+-- STATUS: compiled in CI on PR #3, including `rate_nonneg` and `sqrtDiag_mul_self`.
 -- Copyright (c) 2026 Mohamed Alkobrosli
 -- SPDX-License-Identifier: MIT
 import Mathlib

@@ -7,9 +7,9 @@ The Python package never imports Lean; Lean is a development dependency only.
 ## Status
 
 M0-M3 **built in CI on PR #3**: `lake build` succeeded and the axiom audit in `Audit.lean`
-passed, with Lean and Mathlib pinned to `v4.36.0` and the manifest committed. Two lemmas added in
-response to review (`rate_nonneg`, `sqrtDiag_mul_self`, both in `Definitions.lean`) are **not yet
-covered by a CI run** and stay drafts until one passes.
+passed, with Lean and Mathlib pinned to `v4.36.0` and the manifest committed. This includes
+`rate_nonneg` and `sqrtDiag_mul_self` (`Definitions.lean`), which make the nonnegative-rate domain
+explicit. The `formal` workflow runs Lean only; the Python tests are separate evidence.
 
 Two different checks are involved, and a green build gives only the first:
 
