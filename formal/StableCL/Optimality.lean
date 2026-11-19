@@ -179,8 +179,7 @@ theorem objective_expand (R : Matrix m p ℝ) (d : p → ℝ) (G : Matrix p K �
       (sqrtDiag d * G + isqrtDiag d * Zs) j k
         = (sqrtDiag d * G - N * Nᵀ * (sqrtDiag d * G)) j k := by
     intro j h k
-    rw [Matrix.add_apply, hVs j h k, Matrix.sub_apply]
-    ring
+    rw [Matrix.add_apply, hVs j h k, Matrix.sub_apply, ← sub_eq_add_neg]
   have horth : frob (sqrtDiag d * G + isqrtDiag d * Zs)
       (isqrtDiag d * Z - isqrtDiag d * Zs) = 0 := by
     have key : frob (sqrtDiag d * G + isqrtDiag d * Zs) (isqrtDiag d * Z - isqrtDiag d * Zs)

@@ -9,6 +9,16 @@ import pytest
 from stable_cl import diagonal_rates, free_dim, null_basis, null_step
 
 
+def numerical_rank(A, tol=1e-10):
+    """Rank of ``A`` under the *same* threshold as ``null_basis``: ``s > tol * max(s_1, 1)``.
+
+    ``np.linalg.matrix_rank`` uses ``s_1 * max(A.shape) * eps`` instead; the two conventions can
+    disagree on near-null singular values, so the completeness checks must not mix them.
+    """
+    s = np.linalg.svd(A, compute_uv=False)
+    return int((s > tol * max(float(s[0]), 1.0)).sum()) if s.size else 0
+
+
 @pytest.fixture
 def setup(rng, deg, rates):
     """Random R (8 reference rows) and G, with degree 2 frozen."""
@@ -27,10 +37,13 @@ def test_null_basis_is_orthonormal_and_annihilated_by_A(setup):
 
 def test_exact_null_basis_spans_the_whole_null_space(setup):
     # Assumption A5 of the Lean M5 theorem: N Nᵀ is the projector onto null(A), i.e. N is
-    # orthonormal, annihilated by A, and has dimension p - rank(A).
+    # orthonormal, annihilated by A, and has dimension p - rank(A). The rank uses the same
+    # threshold as `null_basis` (see `numerical_rank`).
     R, _, d, N = setup
     A = R * np.sqrt(d)
-    assert N.shape[1] == A.shape[1] - np.linalg.matrix_rank(A)
+    assert N.shape[1] == A.shape[1] - numerical_rank(A)
+    assert np.allclose(N.T @ N, np.eye(N.shape[1]), atol=1e-9)
+    assert np.abs(A @ N).max() < 1e-9
 
 
 def test_exact_null_basis_is_complete_for_rank_deficient_references(rng, deg, rates):
@@ -40,7 +53,8 @@ def test_exact_null_basis_is_complete_for_rank_deficient_references(rng, deg, ra
     R[4:] = R[:4]  # repeated reference rows: rank(A) <= 4
     A = R * np.sqrt(d)
     N = null_basis(R, d)
-    assert N.shape[1] == A.shape[1] - np.linalg.matrix_rank(A)
+    assert N.shape[1] == A.shape[1] - numerical_rank(A)
+    assert np.allclose(N.T @ N, np.eye(N.shape[1]), atol=1e-9)
     assert np.abs(A @ N).max() < 1e-9
 
 
@@ -87,7 +101,8 @@ def test_step_is_a_descent_direction_with_the_stated_value(setup):
 def test_free_dim_equals_support_size_minus_reference_rank(setup):
     R, _, d, N = setup
     S = d > 0
-    assert free_dim(N, d) == S.sum() - np.linalg.matrix_rank(R[:, S])
+    A_S = R[:, S] * np.sqrt(d[S])  # same threshold as `null_basis`; rows outside S are frozen
+    assert free_dim(N, d) == S.sum() - numerical_rank(A_S)
 
 
 def test_exact_step_is_the_constrained_minimiser(setup, rng):

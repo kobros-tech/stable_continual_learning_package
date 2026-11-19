@@ -115,7 +115,9 @@ theorem nullStep_zero_eq_zero_iff (d : p → ℝ) (N : Matrix p q ℝ) (G : Matr
     apply frob_self_eq_zero
     linarith
   · intro h
-    have e : (0 : ℝ) • (1 : Matrix p p ℝ) + (1 - 0) • (N * Nᵀ) = N * Nᵀ := by simp
+    -- Every scalar is ascribed to ℝ: with a bare `(1 - 0)` Lean elaborates it as `ℕ`, so the
+    -- rewrite pattern did not match the `ℝ`-scalar in `nullStep` (CI runs #10 and #11).
+    have e : (0 : ℝ) • (1 : Matrix p p ℝ) + ((1 : ℝ) - 0) • (N * Nᵀ) = N * Nᵀ := by simp
     unfold nullStep
     rw [e, h, Matrix.mul_zero]
 

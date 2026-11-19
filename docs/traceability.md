@@ -22,7 +22,7 @@ The `formal` workflow runs Lean only; pytest results are separate evidence.
 | A2  | `A N = 0` for `A = R D^{1/2}` (exact null basis)                    | M3                | `test_null_basis_is_orthonormal_and_annihilated_by_A` (residual below `1e-9`, so the guarantee holds up to that tolerance, not exactly)                          |
 | A3  | `N^T N = I`                                                         | M4, M5 (drafted)  | same test                                                                                                                                                       |
 | A4  | `‖A N‖₂ ≤ τ` for the relaxed basis, stated in Lean as `‖(A N) X‖_F ≤ τ ‖X‖_F` for all `X` | M4b (drafted) | `test_relaxed_logit_change_respects_the_spectral_bound` (indirect: it checks the consequence)                                                                    |
-| A5  | `N` spans all of `null(A)`: `N N^T V = V` whenever `A V = 0` (the `tol → 0` hypothesis of Prop 1) | M5 (drafted) | `test_exact_null_basis_spans_the_whole_null_space`, `test_exact_null_basis_is_complete_for_rank_deficient_references` (dimension equals `p - rank A`; with A2 and A3 this gives completeness) |
+| A5  | `N` spans all of `null(A)`: `N N^T V = V` whenever `A V = 0` (the `tol → 0` hypothesis of Prop 1) | M5 (drafted) | `test_exact_null_basis_spans_the_whole_null_space`, `test_exact_null_basis_is_complete_for_rank_deficient_references` (dimension equals `p - rank A`, with the rank taken under `null_basis`'s own threshold `σ > tol·max(σ₁,1)`; with A2 and A3 this gives completeness) |
 
 ## Claims
 
@@ -66,6 +66,10 @@ The `formal` workflow runs Lean only; pytest results are separate evidence.
 - Completeness (A5). Exact reference preservation (M3) needs only `A N = 0`. Constrained
   optimality (M5) additionally needs that `N` is not a proper subspace of `null(A)`; with a
   smaller basis the step is feasible but not the minimiser.
+  The completeness tests count rank with the same threshold as `null_basis`
+  (`σ > tol·max(σ₁,1)`), not `np.linalg.matrix_rank`'s default `σ₁·max(shape)·eps`; the two
+  can disagree on near-null singular values. Numerical completeness is a floating-point check
+  and is not implied by any Lean theorem.
 - Uniqueness in M5 is over the feasible set `{Z : Z_j = 0 for d_j = 0, R Z = 0}`, not over all
   of `R^{p x K}`; the objective does not penalise rows outside `S`.
 - The `descent` results concern the linearised loss (directional derivative) only. They do not
