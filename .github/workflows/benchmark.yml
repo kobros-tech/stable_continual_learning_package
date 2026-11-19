@@ -77,13 +77,14 @@ jobs:
               sys.exit(f"provenance.commit {prov['commit']} != {expected}")
           PY
 
-      # `--report` must reprint exactly what the run printed, from the raw file alone.
+      # `--report` must reprint exactly what the run printed, from the raw file alone. Plain `diff`:
+      # literal equality, blank lines included (the footer line is the only thing removed).
       - name: Reprint the report from the raw file and compare with the run's output
         run: |
           cd "$RUNNER_TEMP/bench"
           python "$GITHUB_WORKSPACE/benchmark.py" --report benchmark_raw.json > benchmark_report.txt
           sed '/^raw results written to/d' benchmark_stdout.txt > stdout_without_footer.txt
-          diff -B stdout_without_footer.txt benchmark_report.txt
+          diff stdout_without_footer.txt benchmark_report.txt
           rm stdout_without_footer.txt
 
       - name: Record the environment

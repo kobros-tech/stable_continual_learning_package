@@ -333,10 +333,13 @@ def _print_test_section(mem, res):
     frontier = means["relaxed"]["acc"] - np.interp(
         means["relaxed"]["forgetting"], [x for x, _ in lr], [y for _, y in lr]
     )
+    acc_ok, forget_ok = da[1] > -0.01, df[2] < 0
+    yes = lambda ok: "yes" if ok else "no"
     print(
-        f"relaxed: learning-rate frontier={frontier:+.3f} verdict="
-        f"{'VALUE' if da[1] > -0.01 and df[2] < 0 else 'no value'} "
-        "(acc CI lower bound > -0.01 and forgetting CI upper bound < 0)"
+        f"relaxed: learning-rate frontier={frontier:+.3f} "
+        f"verdict={'VALUE' if acc_ok and forget_ok else 'no value'} "
+        f"(acc CI lower bound {da[1]:+.3f} > -0.01: {yes(acc_ok)}; "
+        f"forgetting CI upper bound {df[2]:+.3f} < 0: {yes(forget_ok)})"
     )
 
 
@@ -475,7 +478,7 @@ def main(out=None):
     if out is not None:
         with open(out, "w") as fh:
             json.dump(raw, fh, indent=1)
-        print(f"\nraw results written to {out}")
+        print(f"raw results written to {out}")
 
 
 if __name__ == "__main__":

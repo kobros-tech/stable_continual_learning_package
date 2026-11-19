@@ -230,3 +230,56 @@ def test_report_round_trips_through_json():
 
     raw = _raw()
     assert _capture(json.loads(json.dumps(raw))) == _capture(raw)
+
+
+def test_verdict_explanation_states_the_actual_bounds_and_which_criteria_hold():
+    import re
+
+    raw = _raw()
+    ok = _capture(raw)
+    assert re.search(
+        r"verdict=VALUE \(acc CI lower bound [+-]\d\.\d{3} > -0\.01: yes; "
+        r"forgetting CI upper bound [+-]\d\.\d{3} < 0: yes\)",
+        ok,
+    )
+    # relaxed accuracy 0.05 below ordinary on every split: the accuracy criterion fails,
+    # the forgetting criterion still holds, and the text must say so.
+    raw["test_mem60"]["relaxed"]["acc"] = [
+        a - 0.05 for a in raw["test_mem60"]["ordinary"]["acc"]
+    ]
+    bad = _capture(raw)
+    assert re.search(
+        r"verdict=no value \(acc CI lower bound -0\.050 > -0\.01: no; "
+        r"forgetting CI upper bound [+-]\d\.\d{3} < 0: yes\)",
+        bad,
+    )
+
+
+def test_main_output_without_the_footer_equals_report_exactly(monkeypatch, tmp_path):
+    import contextlib
+    import io
+    import json
+
+    def fake_table(configs, splits, seeds, mem, validation):
+        n = len(list(splits))
+        return {
+            name: {
+                "acc": [0.8] * n,
+                "forgetting": [0.05 if name == "ordinary" else 0.02] * n,
+                "plasticity": [0.8] * n,
+                "newest": [0.5] * n,
+                "old": [0.8] * n,
+                "immediate": [[0.9] * 5] * n,
+            }
+            for name in configs
+        }
+
+    monkeypatch.setattr(B, "table", fake_table)
+    out = tmp_path / "raw.json"
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        B.main(str(out))
+    lines = buf.getvalue().split("\n")
+    assert lines[-2].startswith("raw results written to")  # footer is the last line
+    live = "\n".join(lines[:-2]) + "\n"
+    assert live == _capture(json.loads(out.read_text()))  # exact: blank lines included

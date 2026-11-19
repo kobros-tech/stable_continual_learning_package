@@ -64,7 +64,8 @@ It takes tens of minutes, so it is separate from the `python` workflow. Each run
    repository so they cannot make the tree dirty);
 3. fails unless `provenance.dirty` is `false` and `provenance.commit` is the expected revision;
 4. reprints the report with `--report` from the raw file alone and fails unless it matches the
-   run's own output line for line;
+   run's own output exactly (plain `diff`, blank lines included; only the final
+   `raw results written to ...` line is removed);
 5. writes the report to the job summary;
 6. uploads the artifact `benchmark-<revision>` (kept 90 days) containing:
 
@@ -117,7 +118,8 @@ not evidence that degree control can never help.
 - [x] Protocol written down with every constant and selection rule.
 - [x] One command writes raw results with provenance; one command reprints every comparison from them.
 - [x] Workflow runs the benchmark on a clean checkout, verifies provenance, and uploads the artifacts.
-- [ ] A workflow run on the final PR head has passed and its artifact has been reviewed.
+- [x] Artifact of workflow run on `6ecfee6c` reviewed (raw JSON structure, provenance, paired intervals recomputed from the per-split data).
+- [ ] Workflow run on the final PR head (the report wording and exact `diff` changed after `6ecfee6c`) has passed and its artifact has been reviewed.
 - [x] Null and mixed results are reported alongside positive ones (`traceability.md`).
 - [ ] A second dataset (not possible offline; see deviation 2).
 - [ ] At least 10 training seeds per configuration (see deviation 1).
