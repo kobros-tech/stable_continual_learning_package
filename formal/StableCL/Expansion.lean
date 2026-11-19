@@ -1,4 +1,4 @@
--- STATUS: DRAFT, not yet compiled.
+-- STATUS: compiled in CI on PR #3 (M0-M3 build + axiom audit); unchanged since.
 -- Copyright (c) 2026 Mohamed Alkobrosli
 -- SPDX-License-Identifier: MIT
 import StableCL.Definitions

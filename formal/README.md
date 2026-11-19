@@ -6,10 +6,20 @@ The Python package never imports Lean; Lean is a development dependency only.
 
 ## Status
 
-**Every `.lean` file here is a DRAFT: it has not been compiled.** The drafts were written
-without a Lean toolchain or Mathlib build cache available, against Mathlib `v4.36.0` (lemma
-names were checked in that tag's source, but nothing was elaborated). Treat a statement as
-proven only when CI is green and `docs/traceability.md` says so.
+M0-M3 **built in CI on PR #3**: `lake build` succeeded and the axiom audit in `Audit.lean`
+passed, with Lean and Mathlib pinned to `v4.36.0` and the manifest committed. Two lemmas added in
+response to review (`rate_nonneg`, `sqrtDiag_mul_self`, both in `Definitions.lean`) are **not yet
+covered by a CI run** and stay drafts until one passes.
+
+Two different checks are involved, and a green build gives only the first:
+
+1. **Lean accepts the statements and proofs.** Established by CI.
+2. **The statements faithfully express the intended mathematics.** Established by review against
+   `math.tex`, recorded per claim in `../docs/traceability.md`. A green build does not show this.
+
+A theorem being compiled is not the same as the Python implementation satisfying it: the
+numerical `null_basis` is tested only up to a residual, not exactly (see the traceability
+document).
 
 | Milestone | File                         | Result                                                     |
 | --------- | ---------------------------- | ---------------------------------------------------------- |
@@ -18,20 +28,21 @@ proven only when CI is green and `docs/traceability.md` says so.
 | M2        | `StableCL/DegreeControl.lean`| zero effective rate freezes a row; prefix stability        |
 | M3        | `StableCL/RefPreservation.lean` | `A N = 0` implies `R ΔW = 0`, also over a whole experience |
 
-M4 (descent, relaxed residual bound) and M5 (constrained minimiser) are not started. They begin
-only after M0-M3 compile and their statements have been checked against `math.tex`.
+M4 (descent, relaxed residual bound), M5 (constrained minimiser), M6 (numerical checks of the
+null-basis assumptions) and M7 (benchmarks) are out of scope here and not started.
 
-## First-time setup
+## Building locally
+
+`lake-manifest.json` is committed and pins Mathlib and its dependencies to exact commits.
 
 ```sh
 cd formal
-lake update          # resolves Mathlib v4.36.0 and writes lake-manifest.json: COMMIT IT
 lake exe cache get   # prebuilt Mathlib oleans; skip and the first build takes hours
 lake build
 ```
 
 `lean-toolchain` must equal Mathlib's own `lean-toolchain` at the revision in `lakefile.toml`.
-To upgrade, change both together, run `lake update`, commit the new manifest.
+To upgrade, change both together, run `lake update`, and commit the new manifest.
 
 ## Proof integrity
 

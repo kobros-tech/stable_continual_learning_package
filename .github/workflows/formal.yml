@@ -1,5 +1,4 @@
-# STATUS: DRAFT, not yet run. The action inputs below follow leanprover/lean-action's README
-# and have not been exercised on this repository.
+# STATUS: exercised on PR #3. The action inputs below follow leanprover/lean-action's README.
 name: formal
 
 on:

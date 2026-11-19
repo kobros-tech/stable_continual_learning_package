@@ -1,4 +1,5 @@
--- STATUS: DRAFT, not yet compiled.
+-- STATUS: compiled in CI on PR #3. The two `Definitions.lean` entries added after review
+-- are DRAFT until CI runs.
 -- Copyright (c) 2026 Mohamed Alkobrosli
 -- SPDX-License-Identifier: MIT
 import Lean
@@ -28,6 +29,8 @@ elab "#assert_standard_axioms " ids:ident+ : command => do
         throwError "{n} depends on non-standard axiom {a}"
 
 #assert_standard_axioms
+  StableCL.rate_nonneg
+  StableCL.sqrtDiag_mul_self
   StableCL.expand_logits
   StableCL.expand_logits_matrix
   StableCL.expand_old_rows

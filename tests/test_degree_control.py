@@ -52,6 +52,13 @@ def test_invalid_control_factors_are_rejected(deg, rates, bad):
         diagonal_rates(rates[0], deg, bad)
 
 
+@pytest.mark.parametrize("bad", [[-1, 1, 1, 1], [1, 1, 1, -0.1], [1, -1e-9, 1, 1]])
+def test_negative_base_rates_are_rejected(deg, bad):
+    # Domain assumed by Lean's `rate_nonneg`: see docs/traceability.md, A0.
+    with pytest.raises(ValueError):
+        diagonal_rates(bad, deg)
+
+
 @pytest.mark.parametrize(
     "bad", [[True, False, True, True], [1 + 0j, 1, 1, 1], ["a"] * 4]
 )
