@@ -18,8 +18,9 @@ The sum is restricted to `S` explicitly (`penalty` uses `if 0 < d j`); it does n
 rows outside `S`, so only the constraint `Z_{S^c} = 0` makes the minimiser unique.
 
 **Hypotheses.** `hd : d ≥ 0` (A0); `hAN : A N = 0` (A2, `A = R D^{1/2}`);
-and **`hcomp` (A5): `N` spans all of `null(A)`**, i.e. `N Nᵀ V = V` whenever `A V = 0`. A5 is new
-relative to M1-M3 and is the `tol → 0` hypothesis of `math.tex` Prop. 1 ("`P` is the orthogonal
+and **`hcomp` (A5, projector completeness): `N Nᵀ V = V` whenever `A V = 0`**. Given `A N = 0` and
+orthonormal columns (`NᵀN = I`, which this theorem does not assume), this is equivalent to `N`
+spanning all of `null(A)`. A5 is new relative to M1-M3 and is the `tol → 0` hypothesis of `math.tex` Prop. 1 ("`P` is the orthogonal
 projector onto `null(A)`"). Without it the claim is false (a smaller basis gives a feasible but
 non-minimal step).
 

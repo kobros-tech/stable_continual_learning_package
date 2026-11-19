@@ -26,7 +26,7 @@ the same ones as in `math.tex`.
 
 ## Run the code
 
-Requires Python 3 with NumPy, SciPy and scikit-learn (`pytest` for the tests).
+Requires Python 3.11 or newer with NumPy, SciPy and scikit-learn (`pytest` for the tests).
 
 ```bash
 python -m pytest                  # test suite (seconds)

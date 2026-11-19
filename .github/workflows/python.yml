@@ -49,7 +49,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `requires-python` in pyproject.toml is >=3.11; test the oldest and a current version.
+        # `requires-python` in pyproject.toml is >=3.11: test the oldest supported and a current
+        # version. 3.9 and 3.10 are end-of-life and unsupported. (A 3.9 job once failed only because
+        # `ubuntu-latest` is Ubuntu 26.04, which has no Python 3.9 build; the code was not at fault.)
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4

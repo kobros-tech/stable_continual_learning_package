@@ -24,7 +24,7 @@ results are separate evidence.
 | A2  | `A N = 0` for `A = R D^{1/2}` (exact null basis)                    | M3                | `test_null_basis_is_orthonormal_and_annihilated_by_A` (residual below `1e-9`, so the guarantee holds up to that tolerance, not exactly)                          |
 | A3  | `N^T N = I`                                                         | M4                | same test                                                                                                                                                       |
 | A4  | `‖A N‖₂ ≤ τ` for the relaxed basis, stated in Lean as `‖(A N) X‖_F ≤ τ ‖X‖_F` for all `X` | M4b           | `test_relaxed_logit_change_respects_the_spectral_bound` (indirect: it checks the consequence)                                                                    |
-| A5  | `N` spans all of `null(A)`: `N N^T V = V` whenever `A V = 0` (the `tol → 0` hypothesis of Prop 1) | M5           | `test_exact_null_basis_spans_the_whole_null_space`, `test_exact_null_basis_is_complete_for_rank_deficient_references` (dimension equals `p - rank A`, with the rank taken under `null_basis`'s own threshold `σ > tol·max(σ₁,1)`; with A2 and A3 this gives completeness) |
+| A5  | `N` spans all of `null(A)`: `N N^T V = V` whenever `A V = 0` (the `tol → 0` hypothesis of Prop 1) | M5           | `test_exact_null_basis_spans_the_whole_null_space`, `test_exact_null_basis_is_complete_for_rank_deficient_references` (dimension equals `p - rank A`, with the rank taken under `null_basis`'s own threshold `σ > tol·max(σ₁,1)`; given A2 and orthonormal columns (A3) this is equivalent to `N` spanning `null(A)`, which is the form `hcomp` states in Lean) |
 
 ## Claims
 
@@ -48,9 +48,9 @@ results are separate evidence.
 - The relaxed bound subtracts `β A u` (`= β R D G`). `‖RΔW‖` alone is **not** bounded by
   `(1-β) τ ‖u‖`: on 300 random cases it failed 258 times. The existing test already uses the
   correct quantity.
-- `math.tex` Prop 2 uses `τ = tol · max(σ₁, 1)`, while the test above uses `tol · σ₁`. They
-  agree whenever `σ₁ ≥ 1`, which holds for its random fixture; aligning the test with the
-  spec is a small follow-up.
+- `math.tex` Prop 2 and `test_relaxed_logit_change_respects_the_spectral_bound` both use
+  `τ = tol · max(σ₁, 1)`. The test scales `R` so that `σ₁` is below, near and above 1, so the
+  `max(·, 1)` branch is exercised, not only the `σ₁ ≥ 1` case.
 - Exact reference preservation (M3) is stated for the exact null basis. `null_basis` is a
   numerical SVD with a tolerance, so for the implementation the guarantee is "up to A2's
   residual", which is a numerical statement, not a theorem.
