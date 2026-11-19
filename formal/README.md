@@ -37,8 +37,10 @@ document).
 declaration in them is in the axiom audit. Compilation says Lean accepted the statements and
 proofs; that they express `math.tex` is the review recorded in `../docs/traceability.md`.
 Assumptions M4/M5 add beyond M1-M3 are explicit hypotheses: `d ≥ 0` (A0, M4 and M5), `NᵀN = I`
-(A3, M4), the spectral bound (A4, M4b) and completeness of `N` (A5, M5). M6 (numerical checks, pytest) and M7
-(benchmarks) are not Lean work and are not exercised by the `formal` workflow.
+(A3, M4), the spectral bound (A4, M4b) and completeness of `N` (A5, M5). M6 (numerical checks, `tests/test_assumptions.py`) and M7
+(benchmarks, `docs/benchmark_protocol.md`) are not Lean work and are not exercised by the `formal` workflow.
+No Lean file was changed after PR #5. A5, A4 and A2 remain hypotheses of the theorems: that the numerical
+SVD satisfies them is tested, not proven.
 
 ## Building locally
 
