@@ -101,7 +101,9 @@ def test_step_is_a_descent_direction_with_the_stated_value(setup):
 def test_free_dim_equals_support_size_minus_reference_rank(setup):
     R, _, d, N = setup
     S = d > 0
-    A_S = R[:, S] * np.sqrt(d[S])  # same threshold as `null_basis`; rows outside S are frozen
+    A_S = R[:, S] * np.sqrt(
+        d[S]
+    )  # same threshold as `null_basis`; rows outside S are frozen
     assert free_dim(N, d) == S.sum() - numerical_rank(A_S)
 
 
@@ -114,11 +116,16 @@ def test_exact_step_is_the_constrained_minimiser(setup, rng):
     assert np.isclose(f(-step + Z) - f(-step), 0.5 * np.sum(Z[S] ** 2 / d[S][:, None]))
 
 
-def test_relaxed_logit_change_respects_the_spectral_bound(setup):
+@pytest.mark.parametrize("scale", [0.01, 1.0, 100.0])
+def test_relaxed_logit_change_respects_the_spectral_bound(setup, scale):
+    # tau = tol * max(sigma_1, 1) is the threshold of `null_basis` and `math.tex`. The scales
+    # put sigma_1 below, near and above 1, so the `max(., 1)` branch is actually exercised.
     R, G, d, _ = setup
+    R = scale * R
     b, tol = 0.3, 0.3
     Nt = null_basis(R, d, tol)
-    tau = tol * np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0]
+    sigma1 = np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0]
+    tau = tol * max(sigma1, 1.0)
     rg = np.sqrt(d)[:, None] * G
     gap = np.linalg.norm(R @ null_step(G, Nt, d, b) - b * R @ (d[:, None] * G))
     assert gap <= (1 - b) * tau * np.linalg.norm(rg) + 1e-9

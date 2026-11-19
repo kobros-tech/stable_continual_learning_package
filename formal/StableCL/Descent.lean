@@ -1,4 +1,4 @@
--- STATUS: DRAFT, not yet compiled.
+-- STATUS: compiled in CI on PR #5 (M4/M5 build + axiom audit).
 -- Copyright (c) 2026 Mohamed Alkobrosli
 -- SPDX-License-Identifier: MIT
 import StableCL.Frobenius

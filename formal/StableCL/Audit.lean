@@ -1,5 +1,5 @@
--- STATUS: the M0-M3 entries compiled in CI on PR #3 and pass the axiom audit. The entries from
--- Frobenius, Descent, Relaxed and Optimality (M4, M5) are DRAFT, not yet compiled.
+-- STATUS: the M0-M3 entries compiled in CI on PR #3 and pass the axiom audit; the entries from
+-- Frobenius, Descent, Relaxed and Optimality (M4, M5) compiled in CI on PR #5 and pass it too.
 -- Copyright (c) 2026 Mohamed Alkobrosli
 -- SPDX-License-Identifier: MIT
 import Lean

@@ -1,5 +1,5 @@
--- STATUS: M0-M3 built in CI on PR #3. Frobenius, Descent, Relaxed, Optimality (M4, M5) are
--- DRAFT, not yet compiled. See formal/README.md.
+-- STATUS: M0-M3 built in CI on PR #3; Frobenius, Descent, Relaxed, Optimality (M4, M5) built in
+-- CI on PR #5. See formal/README.md.
 import StableCL.Definitions
 import StableCL.Expansion
 import StableCL.DegreeControl
