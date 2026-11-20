@@ -45,7 +45,7 @@ shown by `pytest -rs`, unless the importable `polynomial_cl` is the `diagonal_co
 
 The `benchmark` workflow runs the benchmark on a clean checkout and uploads the raw results,
 console output, regenerated report and environment as a downloadable artifact; see
-`docs/benchmark_protocol.md`.
+`docs/benchmark_protocol.md`. `tools/check_benchmark_artifact.py` audits a downloaded artifact.
 
 ## Build the PDFs
 

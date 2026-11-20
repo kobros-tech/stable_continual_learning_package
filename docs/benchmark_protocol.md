@@ -79,7 +79,11 @@ It takes tens of minutes, so it is separate from the `python` workflow. Each run
 If a run fails, `benchmark-failed-<revision>` holds whatever was written (kept 14 days).
 
 To study a run: open the workflow run on GitHub, read the job summary, download the artifact from
-the run page, and reprint locally with `python benchmark.py --report benchmark_raw.json`.
+the run page, and reprint locally with `python benchmark.py --report benchmark_raw.json`. To audit
+it independently of the workflow, unzip it and run
+`python tools/check_benchmark_artifact.py DIR --expect-commit <sha>`: it re-reads the raw file,
+checks provenance and the structure of every section, recomputes the paired intervals with its own
+formula, and compares `benchmark_report.txt` with the report regenerated from the raw data.
 Hosted-runner CPUs can differ between runs; the benchmark is deterministic given its seeds, but
 tiny floating-point differences across machines are possible, so compare results through the
 reported confidence intervals, not to the last digit.
@@ -119,7 +123,8 @@ not evidence that degree control can never help.
 - [x] One command writes raw results with provenance; one command reprints every comparison from them.
 - [x] Workflow runs the benchmark on a clean checkout, verifies provenance, and uploads the artifacts.
 - [x] Artifact of workflow run on `6ecfee6c` reviewed (raw JSON structure, provenance, paired intervals recomputed from the per-split data).
-- [ ] Workflow run on the final PR head (the report wording and exact `diff` changed after `6ecfee6c`) has passed and its artifact has been reviewed.
+- [x] Workflow run on `9fd5ccfc` (after the report wording and exact `diff` changes) passed: clean tree, `dirty: false`, commit matches, report regenerated from the raw file and compared with plain `diff`. Its numbers equal those of the reviewed `6ecfee6c` run.
+- [ ] Raw artifact of the final PR head opened and checked with `python tools/check_benchmark_artifact.py DIR --expect-commit <sha>` (the check has been run on a synthetic artifact only; the workflow log shows the same checks passing, but the uploaded JSON itself has not been opened for this head).
 - [x] Null and mixed results are reported alongside positive ones (`traceability.md`).
 - [ ] A second dataset (not possible offline; see deviation 2).
 - [ ] At least 10 training seeds per configuration (see deviation 1).
