@@ -1,0 +1,28 @@
+# STATUS: exercised on PR #3. The action inputs below follow leanprover/lean-action's README.
+name: formal
+
+on:
+  push:
+    paths: ["formal/**", ".github/workflows/formal.yml"]
+  pull_request:
+    paths: ["formal/**", ".github/workflows/formal.yml"]
+
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The manifest is what actually pins Mathlib (and its dependencies) to a commit.
+      - name: Manifest is committed
+        run: test -f formal/lake-manifest.json
+
+      # Every theorem must be listed in StableCL/Audit.lean ...
+      - name: Audit coverage
+        run: formal/scripts/check_audit_coverage.sh
+
+      # ... and `lake build` elaborates Audit.lean, which fails on `sorryAx`
+      # or any axiom beyond propext / Classical.choice / Quot.sound.
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: formal

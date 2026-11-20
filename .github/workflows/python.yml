@@ -1,0 +1,75 @@
+# Separate from formal.yml on purpose: that workflow only
+# triggers on `formal/**`, so it would never see a change to the Python package, tests or docs.
+name: python
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same ref makes the older run redundant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      # Hook environments (ruff, prettier's node env, ...) are keyed on the config, so a hook
+      # version bump in .pre-commit-config.yaml invalidates the cache.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Several hooks rewrite files (`--fix`, `--write`, ruff-format). In CI a rewrite means the
+      # committed file was not clean, so the hook fails and the diff is printed.
+      # `markdownlint-cli2-docker` needs Docker, which GitHub-hosted ubuntu runners provide.
+      - name: Run all hooks
+        run: pre-commit run --all-files --show-diff-on-failure --color always
+
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # `requires-python` in pyproject.toml is >=3.11: test the oldest supported and a current
+        # version. 3.9 and 3.10 are end-of-life and unsupported. (A 3.9 job once failed only because
+        # `ubuntu-latest` is Ubuntu 26.04, which has no Python 3.9 build; the code was not at fault.)
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # The project is not pip-installed: pyproject.toml has no [build-system] and the repo root
+      # holds several top-level directories, so `pip install .` is not a supported path.
+      # `pythonpath = ["."]` in [tool.pytest.ini_options] makes `stable_cl` importable.
+      # Keep this list in sync with `dependencies` and `[project.optional-dependencies].test`.
+      - name: Install dependencies
+        run: python -m pip install numpy scipy scikit-learn pytest
+
+      # -ra prints the reason for every skip. tests/test_pr_parity.py is skipped unless the
+      # external `polynomial_cl` package is importable, which it is not here.
+      - name: Run tests
+        run: python -m pytest -ra -q

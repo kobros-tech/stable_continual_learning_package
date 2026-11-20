@@ -1,0 +1,16 @@
+name = "StableCL"
+defaultTargets = ["StableCL"]
+
+[leanOptions]
+autoImplicit = false
+
+# Lean and Mathlib are pinned together: lean-toolchain above must equal the
+# lean-toolchain file of the Mathlib revision below. After changing either,
+# run `lake update` and commit the regenerated lake-manifest.json.
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "v4.36.0"
+
+[[lean_lib]]
+name = "StableCL"
