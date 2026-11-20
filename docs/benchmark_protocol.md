@@ -124,7 +124,7 @@ not evidence that degree control can never help.
 - [x] Workflow runs the benchmark on a clean checkout, verifies provenance, and uploads the artifacts.
 - [x] Artifact of workflow run on `6ecfee6c` reviewed (raw JSON structure, provenance, paired intervals recomputed from the per-split data).
 - [x] Workflow run on `9fd5ccfc` (after the report wording and exact `diff` changes) passed: clean tree, `dirty: false`, commit matches, report regenerated from the raw file and compared with plain `diff`. Its numbers equal those of the reviewed `6ecfee6c` run.
-- [ ] Raw artifact of the final PR head opened and checked with `python tools/check_benchmark_artifact.py DIR --expect-commit <sha>` (the check has been run on a synthetic artifact only; the workflow log shows the same checks passing, but the uploaded JSON itself has not been opened for this head).
+- [x] Raw artifact of workflow run 44831393018 for `ba4b2c2c` opened and checked: `python tools/check_benchmark_artifact.py DIR --expect-commit ba4b2c2c88faa71cfb1fce3031ee90647ea008ca` printed `OK` (clean provenance, structure of every section, paired intervals recomputed, `benchmark_stdout.txt` equal to `benchmark_report.txt`). Valid only for that revision: any later change to `benchmark.py` or `stable_cl/` needs a new run and a new check.
 - [x] Null and mixed results are reported alongside positive ones (`traceability.md`).
 - [ ] A second dataset (not possible offline; see deviation 2).
 - [ ] At least 10 training seeds per configuration (see deviation 1).
