@@ -11,7 +11,15 @@ the selection rule of the PR (acquisition floor, Pareto front, accuracy - forget
 single-degree candidates only; the PR's combination step and Split-MNIST study are not repeated.
 """
 
+import argparse
+import json
+import platform
+import subprocess
+import sys
+
 import numpy as np
+import scipy
+import sklearn
 from scipy import stats
 
 import stable_cl as S
@@ -256,8 +264,135 @@ def mean_row(res):
     return out
 
 
-def main():
-    """Run the complete benchmark and print the tables.
+def provenance():
+    """Metadata stored next to the raw results so a number can be traced to code and versions.
+
+    Returns
+    -------
+    dict
+        Git commit (``None`` outside a repository), dirty flag, Python/NumPy/SciPy/scikit-learn
+        versions, and the protocol constants of this module.
+    """
+
+    def git(*args):
+        try:
+            return subprocess.run(
+                ["git", *args], capture_output=True, text=True, check=True
+            ).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+    status = git("status", "--porcelain")
+    return {
+        "commit": git("rev-parse", "HEAD"),
+        "dirty": None if status is None else bool(status),
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "scipy": scipy.__version__,
+        "scikit-learn": sklearn.__version__,
+        "protocol": {
+            "ETA": ETA,
+            "MEM": MEM,
+            "FLOOR": FLOOR,
+            "LR_SCALES": list(LR_SCALES),
+            "FACTORS": list(FACTORS),
+            "validation_splits": [100, 101, 102, 103],
+            "test_splits": list(range(10)),
+            "training_seeds": [1, 2],
+        },
+    }
+
+
+def _print_test_section(mem, res):
+    """Print one memory size of the test study: method table, paired comparisons, frontier."""
+    means = {n: mean_row(r) for n, r in res.items()}
+    lr_names = [f"lr x{s}" for s in LR_SCALES[1:]]
+    lr = sorted(
+        [(means[n]["forgetting"], means[n]["acc"]) for n in (*lr_names, "ordinary")]
+    )
+    print(f"\n[test, memory {mem}/class, 10 splits x 2 seeds]")
+    print("method       acc    forget  plasticity  newest  old")
+    for n, r in means.items():
+        print(
+            f"{n:12s} {r['acc']:.3f}  {r['forgetting']:.3f}   {r['plasticity']:.3f}     "
+            f"{r['newest']:.3f}  {r['old']:.3f}"
+        )
+    for a, b in (
+        ("strategy_b", "ordinary"),
+        ("relaxed", "ordinary"),
+        ("relaxed", "strategy_b"),
+    ):
+        da, df = (paired_ci(res[a][k], res[b][k]) for k in ("acc", "forgetting"))
+        print(
+            f"{a} vs {b}: d_acc={da[0]:+.3f} [{da[1]:+.3f},{da[2]:+.3f}] "
+            f"d_forget={df[0]:+.3f} [{df[1]:+.3f},{df[2]:+.3f}]"
+        )
+    da, df = (
+        paired_ci(res["relaxed"][k], res["ordinary"][k]) for k in ("acc", "forgetting")
+    )
+    frontier = means["relaxed"]["acc"] - np.interp(
+        means["relaxed"]["forgetting"], [x for x, _ in lr], [y for _, y in lr]
+    )
+    acc_ok, forget_ok = da[1] > -0.01, df[2] < 0
+    yes = lambda ok: "yes" if ok else "no"
+    print(
+        f"relaxed: learning-rate frontier={frontier:+.3f} "
+        f"verdict={'VALUE' if acc_ok and forget_ok else 'no value'} "
+        f"(acc CI lower bound {da[1]:+.3f} > -0.01: {yes(acc_ok)}; "
+        f"forgetting CI upper bound {df[2]:+.3f} < 0: {yes(forget_ok)})"
+    )
+
+
+def report(raw):
+    """Print every comparison of the benchmark from a raw-results dictionary.
+
+    This is the only code that prints results: :func:`main` builds the raw dictionary and then
+    calls this function, so ``python benchmark.py --report FILE`` reproduces the console output
+    of the run that wrote ``FILE`` (same lines, same order) without recomputing any model.
+
+    Parameters
+    ----------
+    raw : dict
+        Contents of the JSON written by ``python benchmark.py --out FILE``: the validation
+        selection of the relaxation (``relaxation``), per-split test metrics for each memory size
+        (``test_mem60``, ``test_mem100``), and the degree-control study (``degree_control``:
+        for each base update its validation rows, the selected candidate or ``None``, and the
+        per-split test metrics when a candidate was selected).
+    """
+    rel = raw["relaxation"]
+    print(
+        f"[validation] relaxed selected: tol={rel['config']['tol']} beta={rel['config']['beta']} "
+        f"n_ref={rel['config']['n_ref']}; ordinary forgetting={rel['ordinary_forgetting']:.3f}"
+    )
+    for mem in (60, 100):
+        if f"test_mem{mem}" in raw:
+            _print_test_section(mem, raw[f"test_mem{mem}"])
+    dc = raw.get("degree_control")
+    if dc:
+        print(f"\n[degree control, memory {MEM}/class, acquisition floor {FLOOR}]")
+        for bname, entry in dc.items():
+            v = entry["validation"]
+            feasible = sum(m["min_immediate"] >= FLOOR for m in v.values())
+            print(
+                f"{bname}: {feasible}/{len(v)} validation candidates feasible; "
+                f"selected {entry['selected']}"
+            )
+            res = entry["test"]
+            if res is None:
+                continue
+            da, df = (
+                paired_ci(res["ctrl"][k], res["base"][k]) for k in ("acc", "forgetting")
+            )
+            print(
+                f"  test: d_acc={da[0]:+.3f} [{da[1]:+.3f},{da[2]:+.3f}] "
+                f"d_forget={df[0]:+.3f} [{df[1]:+.3f},{df[2]:+.3f}] "
+                f"min arrival acc {mean_row(res['base'])['min_immediate']:.3f} -> "
+                f"{mean_row(res['ctrl'])['min_immediate']:.3f}"
+            )
+
+
+def main(out=None):
+    """Run the complete benchmark, then print the tables with :func:`report`.
 
     1. Tune the relaxation on validation views: among the 12 (tol, beta) candidates whose
        validation forgetting is at most 70 % of ordinary SGD's, take the highest accuracy.
@@ -265,7 +400,16 @@ def main():
        ``strategy_b`` and the selected relaxation, with paired 95 % intervals over 10 splits.
     3. Degree control on top of each base update: select on validation (see :func:`select`),
        then compare with and without the selected control on the test splits.
+
+    Parameters
+    ----------
+    out : str, optional
+        Path of a JSON file for the raw per-split results and :func:`provenance`.  Everything
+        printed is produced by :func:`report` from that same dictionary, so the file is enough
+        to reproduce the printed output.
     """
+    raw = {"provenance": provenance()}
+
     # 1. tune only the relaxation on validation views
     cand = {"ordinary": ({}, 1.0, None), "strategy_b": (STRATEGY_B, 1.0, None)}
     cand.update({f"relaxed|{c['tol']}|{c['beta']}": (c, 1.0, None) for c in RELAXED})
@@ -283,10 +427,12 @@ def main():
         )
     name = max(eligible)[1]
     relaxed = cand[name][0]
-    print(
-        f"[validation] relaxed selected: tol={relaxed['tol']} beta={relaxed['beta']} "
-        f"n_ref={relaxed['n_ref']}; ordinary forgetting={base_forget:.3f}"
-    )
+    raw["relaxation"] = {
+        "selected": name,
+        "config": relaxed,
+        "ordinary_forgetting": float(base_forget),
+        "validation": val,
+    }
 
     # 2. test: ordinary, learning-rate controls, exact strategy_b, relaxed
     for mem in (60, 100):
@@ -295,48 +441,11 @@ def main():
         configs.update(
             {"strategy_b": (STRATEGY_B, 1.0, None), "relaxed": (relaxed, 1.0, None)}
         )
-        res = table(configs, range(10), (1, 2), mem, False)
-        means = {n: mean_row(r) for n, r in res.items()}
-        lr = sorted(
-            [
-                (means[f"lr x{s}"]["forgetting"], means[f"lr x{s}"]["acc"])
-                for s in LR_SCALES[1:]
-            ]
-            + [(means["ordinary"]["forgetting"], means["ordinary"]["acc"])]
-        )
-        print(f"\n[test, memory {mem}/class, 10 splits x 2 seeds]")
-        print("method       acc    forget  plasticity  newest  old")
-        for n, r in means.items():
-            print(
-                f"{n:12s} {r['acc']:.3f}  {r['forgetting']:.3f}   {r['plasticity']:.3f}     "
-                f"{r['newest']:.3f}  {r['old']:.3f}"
-            )
-        for a, b in (
-            ("strategy_b", "ordinary"),
-            ("relaxed", "ordinary"),
-            ("relaxed", "strategy_b"),
-        ):
-            da, df = (paired_ci(res[a][k], res[b][k]) for k in ("acc", "forgetting"))
-            print(
-                f"{a} vs {b}: d_acc={da[0]:+.3f} [{da[1]:+.3f},{da[2]:+.3f}] "
-                f"d_forget={df[0]:+.3f} [{df[1]:+.3f},{df[2]:+.3f}]"
-            )
-        da, df = (
-            paired_ci(res["relaxed"][k], res["ordinary"][k])
-            for k in ("acc", "forgetting")
-        )
-        frontier = means["relaxed"]["acc"] - np.interp(
-            means["relaxed"]["forgetting"], [x for x, _ in lr], [y for _, y in lr]
-        )
-        print(
-            f"relaxed: learning-rate frontier={frontier:+.3f} verdict="
-            f"{'VALUE' if da[1] > -0.01 and df[2] < 0 else 'no value'} "
-            "(acc CI lower bound > -0.01 and forgetting CI upper bound < 0)"
-        )
+        raw[f"test_mem{mem}"] = table(configs, range(10), (1, 2), mem, False)
 
     # 3. degree control on top of each base update: validation selection, then paired test
     bases = {"ordinary": {}, "strategy_b": STRATEGY_B, "relaxed": relaxed}
-    print(f"\n[degree control, memory {MEM}/class, acquisition floor {FLOOR}]")
+    raw["degree_control"] = {}
     for bname, cfg in bases.items():
         grid = controls()
         v = {
@@ -349,30 +458,40 @@ def main():
                 True,
             ).items()
         }
-        feasible = sum(m["min_immediate"] >= FLOOR for m in v.values())
         pick = select(v)
-        print(
-            f"{bname}: {feasible}/{len(v)} validation candidates feasible; selected {pick}"
-        )
-        if pick is None or grid[pick] is None:
-            continue
-        res = table(
-            {"base": (cfg, 1.0, None), "ctrl": (cfg, 1.0, grid[pick])},
-            range(10),
-            (1, 2),
-            MEM,
-            False,
-        )
-        da, df = (
-            paired_ci(res["ctrl"][k], res["base"][k]) for k in ("acc", "forgetting")
-        )
-        print(
-            f"  test: d_acc={da[0]:+.3f} [{da[1]:+.3f},{da[2]:+.3f}] "
-            f"d_forget={df[0]:+.3f} [{df[1]:+.3f},{df[2]:+.3f}] "
-            f"min arrival acc {mean_row(res['base'])['min_immediate']:.3f} -> "
-            f"{mean_row(res['ctrl'])['min_immediate']:.3f}"
-        )
+        test = None
+        if pick is not None and grid[pick] is not None:
+            test = table(
+                {"base": (cfg, 1.0, None), "ctrl": (cfg, 1.0, grid[pick])},
+                range(10),
+                (1, 2),
+                MEM,
+                False,
+            )
+        raw["degree_control"][bname] = {
+            "validation": v,
+            "selected": pick,
+            "test": test,
+        }
+
+    report(raw)
+    if out is not None:
+        with open(out, "w") as fh:
+            json.dump(raw, fh, indent=1)
+        print(f"raw results written to {out}")
 
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument(
+        "--out", help="write raw per-split results and provenance to this JSON file"
+    )
+    ap.add_argument(
+        "--report", help="print paired comparisons from a raw JSON file and exit"
+    )
+    args = ap.parse_args()
+    if args.report:
+        with open(args.report) as fh:
+            report(json.load(fh))
+        sys.exit(0)
+    main(args.out)

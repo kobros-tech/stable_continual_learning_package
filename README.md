@@ -16,7 +16,9 @@ the PDFs are not committed and are built locally (see below).
 | `stable_cl/training.py`   | `softmax`, `train_task`: replay minibatches and one experience of training          |
 | `stable_cl/experiment.py` | `load_digits_features`, `run`, `demo`: data, the five experiences, metrics          |
 | `benchmark.py`            | validation tuning, paired test comparisons, degree-control selection                |
-| `tests/`                  | pytest suite (numerical properties of every function)                               |
+| `tests/`                  | pytest suite (numerical properties of every function; `test_assumptions.py` checks A2-A5) |
+| `formal/`                 | Lean 4 + Mathlib proofs about the exact update (M0-M5); see `formal/README.md`     |
+| `docs/`                   | `traceability.md` (claim, proof, test, experiment), `benchmark_protocol.md`         |
 | `math.tex`                | specification: definitions, propositions, proofs, results                           |
 | `explain.tex`             | full explanation of the package (features, replay, null-space update, experiments)  |
 
@@ -26,12 +28,13 @@ the same ones as in `math.tex`.
 
 ## Run the code
 
-Requires Python 3 with NumPy, SciPy and scikit-learn (`pytest` for the tests).
+Requires Python 3.11 or newer with NumPy, SciPy and scikit-learn (`pytest` for the tests).
 
 ```bash
 python -m pytest                  # test suite (seconds)
 python -m stable_cl    # demo: three methods on one split
-python benchmark.py               # several minutes on one CPU core
+python benchmark.py --out results/benchmark_raw.json  # several minutes on one CPU core
+python benchmark.py --report results/benchmark_raw.json  # reprint the full report from raw results
 ```
 
 One test compares a `strategy_b` step with the PR implementation. It is skipped, with the reason
@@ -39,6 +42,10 @@ shown by `pytest -rs`, unless the importable `polynomial_cl` is the `diagonal_co
 (it needs `apply_degree_control`, `step_scale_for`, `degree_of_feature`, `fit_task`,
 `null_space_basis`), e.g.
 `PYTHONPATH=/path/to/polynomial_cl_core-diagonal_control/src python -m pytest tests/test_pr_parity.py`.
+
+The `benchmark` workflow runs the benchmark on a clean checkout and uploads the raw results,
+console output, regenerated report and environment as a downloadable artifact; see
+`docs/benchmark_protocol.md`.
 
 ## Build the PDFs
 

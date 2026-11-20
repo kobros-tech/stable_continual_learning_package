@@ -3,6 +3,8 @@
 
 """Incremental protocol, metric definitions and leakage-free data preparation."""
 
+from itertools import pairwise
+
 import numpy as np
 import pytest
 
@@ -144,7 +146,7 @@ def test_stratified_cut_partitions_preserves_order_and_is_deterministic():
     assert sorted(np.concatenate([first, second])) == sorted(idx)
     assert not set(first) & set(second)
     pos = {v: i for i, v in enumerate(idx)}
-    assert all(pos[a] < pos[b] for a, b in zip(first, first[1:]))  # relative order kept
+    assert all(pos[a] < pos[b] for a, b in pairwise(first))  # relative order kept
     assert all(
         np.array_equal(u, v)
         for u, v in zip(stratified_cut(y, idx, 0.5), (first, second))
