@@ -50,8 +50,10 @@ results are separate evidence.
   `(1-β) τ ‖u‖`: on 300 random cases it failed 258 times. The existing test already uses the
   correct quantity.
 - `math.tex` Prop 2 and `test_relaxed_logit_change_respects_the_spectral_bound` both use
-  `τ = tol · max(σ₁, 1)`. The test scales `R` so that `σ₁` is below, near and above 1, so the
-  `max(·, 1)` branch is exercised, not only the `σ₁ ≥ 1` case.
+  `τ = tol · max(σ₁, 1)`. The tests scale `R` so that `σ₁` is far below 1 (about 0.1) and far above
+  1 (about 10 to 3500), and `test_relaxed_residual_bound_with_sigma1_around_one` places `σ₁` at
+  0.5, 1 and 2, so both sides of the `max(·, 1)` branch point are exercised, not only
+  `σ₁ ≥ 1`.
 - Exact reference preservation (M3) is stated for the exact null basis. `null_basis` is a
   numerical SVD with a tolerance, so for the implementation the guarantee is "up to A2's
   residual", which is a numerical statement, not a theorem.
@@ -76,7 +78,7 @@ results are separate evidence.
 - Uniqueness in M5 is over the feasible set `{Z : Z_j = 0 for d_j = 0, R Z = 0}`, not over all
   of `R^{p x K}`; the objective does not penalise rows outside `S`.
 - M6 (`tests/test_assumptions.py`) checks A2-A5 and the approximate guarantees over 48 random,
-  rank-deficient, partly frozen and rescaled (`σ₁` below, near, above 1) cases. These are
+  rank-deficient, partly frozen and rescaled cases (`σ₁` from about 0.07 to about 3500). These are
   floating-point tests. They do not prove that `np.linalg.svd` satisfies A2-A5 in every case,
   and Lean does not verify them. What would prove them is a Lean theorem about the exact
   real-arithmetic SVD (right singular vectors with `σ ≤ τ` satisfy `NᵀN = I`, `‖A N‖₂ ≤ τ`, and,

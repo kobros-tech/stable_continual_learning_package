@@ -26,6 +26,9 @@ def make_case(seed, p=24, rows=9, scale=1.0, rank=None, frozen=0):
     """Random reference matrix ``R`` (optionally rank-deficient), rates ``d`` and gradient ``G``.
 
     ``frozen`` zeroes the rate of that many leading coordinates, so ``d_j = 0`` occurs.
+    ``scale`` multiplies ``R`` exactly once, also when ``rank`` is given: ``R[:rank]`` below is
+    taken from the already scaled matrix, so the product is ``scale`` times the unit-scale one
+    (pinned by ``test_make_case_applies_scale_exactly_once``). Do not scale it again there.
     """
     rng = np.random.default_rng(seed)
     R = scale * rng.normal(size=(rows, p))
@@ -238,6 +241,37 @@ def test_tau_convention_is_exercised_below_one():
     R, d, _ = make_case(0, scale=0.01)
     sigma1 = np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0]
     assert sigma1 < 1 and tau_of(R, d, 0.3) == 0.3
+
+
+@pytest.mark.parametrize("rank", [None, 4])
+@pytest.mark.parametrize("frozen", [0, 6])
+@pytest.mark.parametrize("scale", [0.01, 100.0])
+def test_make_case_applies_scale_exactly_once(scale, rank, frozen):
+    # Guards the fixture: rescaled cases must be `scale` times the unit-scale case, with the same
+    # rank, rates and gradient (not identical to it, and not scaled a second time).
+    R1, d1, G1 = make_case(1, scale=1.0, rank=rank, frozen=frozen)
+    Rs, ds, Gs = make_case(1, scale=scale, rank=rank, frozen=frozen)
+    assert np.allclose(Rs, scale * R1, rtol=1e-12, atol=0.0)
+    assert np.array_equal(ds, d1) and np.array_equal(Gs, G1)
+    if rank is not None:
+        assert np.linalg.matrix_rank(Rs) == rank
+
+
+@pytest.mark.parametrize("target", [0.5, 1.0, 2.0])
+@pytest.mark.parametrize("tol", [0.03, 0.3])
+@pytest.mark.parametrize("beta", [0.0, 0.5])
+@pytest.mark.parametrize("seed", range(3))
+def test_relaxed_residual_bound_with_sigma1_around_one(seed, beta, tol, target):
+    # The scaled cases above have sigma_1 from about 0.07 to 3500, so none sits at the branch
+    # point of tau = tol * max(sigma_1, 1). Here R is rescaled so that sigma_1 = 0.5, 1 and 2.
+    R, d, G = make_case(seed, rank=4, frozen=5)
+    R = R * (target / np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0])
+    assert np.isclose(np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0], target)
+    N = null_basis(R, d, tol)
+    u = np.sqrt(d)[:, None] * G
+    dW = -null_step(G, N, d, beta)
+    gap = np.linalg.norm(R @ dW + beta * (R * np.sqrt(d)) @ u)
+    assert gap <= (1 - beta) * tau_of(R, d, tol) * np.linalg.norm(u) + SLACK
 
 
 def test_diagonal_rates_are_the_default_rate_vector_for_these_cases():
