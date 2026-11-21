@@ -1,32 +1,34 @@
 # Copyright (c) 2026 Mohamed Alkobrosli
 # SPDX-License-Identifier: MIT
 
-r"""Diagonal degree-wise learning rates and the (relaxed) null-space step.
+r"""Diagonal rates and the two steps of the update: ``ordinary`` and ``relaxed``.
 
 One minibatch gradient :math:`G \in \mathbb{R}^{p \times K}` is turned into a weight update using a
-diagonal rate matrix :math:`D = \operatorname{diag}(d)`, :math:`d_j = \eta_{\deg(j)} m_{\deg(j)}`:
+diagonal rate matrix :math:`D = \operatorname{diag}(d)`.  The vector :math:`d` holds the
+*effective* rate of every feature: it already contains every learning-rate factor, and no further
+rate is applied to a step.  With group base rates :math:`\eta` and degree-control factors :math:`m`
+it is built by :func:`diagonal_rates` as :math:`d_j = \eta_{g(j)}\, m_{g(j)}`.
 
 .. math::
 
     \text{ordinary:}\quad \Delta W = -D\,G,
     \qquad
-    \text{strategy\_b:}\quad
+    \text{relaxed:}\quad
     \Delta W = -D^{1/2}\bigl[P + \beta (I - P)\bigr] D^{1/2} G,
     \quad P = N N^\top .
 
-Here :math:`R` holds the features of the stored reference examples of the old classes and the
-columns of :math:`N` form an orthonormal basis of (the numerical) null space of
-:math:`A = R D^{1/2}`.  With :math:`\beta = 0` and :math:`\text{tol} \to 0` this is exactly
-``strategy_b`` of the ``polynomial_cl`` ``diagonal_control`` PR: reference logits :math:`R\,\Delta W`
-do not change.  :math:`\text{tol} > 0` and :math:`\beta > 0` are relaxations specific to this
-package.  See ``math.tex`` for the proofs.
+Here :math:`R` holds the features of the stored reference examples and the columns of :math:`N` form
+an orthonormal basis of (the numerical) null space of :math:`A = R D^{1/2}`.  The special cases are
+:math:`\beta = 1` (ordinary rate-weighted SGD, for every :math:`N`), :math:`\beta = 0` (exact
+reference preservation when :math:`A N = 0`) and :math:`0 < \beta < 1` (relaxed).  The relaxed step
+is not unconditionally reference-preserving: with an approximate null basis the reference logits
+change by at most the residual bound of ``math.tex`` (Proposition 2), under the assumptions stated
+there and in ``docs/traceability.md``.
 """
 
 from __future__ import annotations
 
 import numpy as np
-
-from .features import N_GROUPS
 
 
 def _check_matrix_and_rates(M, d, what):
@@ -97,84 +99,86 @@ def _real(v, what):
     return a.astype(float)
 
 
-def diagonal_rates(eta, deg, control=None):
+def diagonal_rates(base_rates, group, control=None):
     r"""Diagonal of the rate matrix :math:`D` (the matrix itself is never formed).
 
     .. math::
 
-        d_j = \eta_{\deg(j)}\, m_{\deg(j)},
+        d_j = \eta_{g(j)}\, m_{g(j)},
         \qquad D = \operatorname{diag}(d),
         \qquad D^{1/2} = \operatorname{diag}(\sqrt{d_j}),
 
-    where :math:`\eta \in \mathbb{R}^{4}_{\ge 0}` are base rates per degree group (at least one
-    positive) and :math:`m \in [0, 1]^{4}` are degree-control factors (:math:`m = \mathbf{1}` when
-    ``control`` is ``None``).
+    where :math:`\eta \in \mathbb{R}^{G}_{\ge 0}` are base rates per feature group (at least one
+    positive), :math:`m \in [0, 1]^{G}` are degree-control factors (:math:`m = \mathbf{1}` when
+    ``control`` is ``None``) and :math:`g(j)` is the group of feature :math:`j`.  The number of
+    groups :math:`G` is ``len(base_rates)``; nothing here knows what a group means (for example
+    polynomial degree).
 
     Conventions, all enforced:
 
-    * ``control=None`` and ``control=[1, 1, 1, 1]`` give exactly :math:`d_j = \eta_{\deg(j)}`.
-    * :math:`m_g = 0` freezes every feature of degree :math:`g`.
+    * ``control=None`` and ``control=[1] * G`` give exactly :math:`d_j = \eta_{g(j)}`.
+    * :math:`m_g = 0` freezes every feature of group :math:`g`.
     * All-zero effective rates are allowed and describe a no-op experience.
-    * The map is *prefix-stable*: ``d`` depends on ``deg[j]`` only, so features added by expansion
-      take the rate of their own degree and old features keep theirs.
-    * ``control`` is never broadcast: a scalar is rejected.
+    * The map is *prefix-stable*: ``d`` depends on ``group[j]`` only, so features added by
+      expansion take the rate of their own group and old features keep theirs.
+    * Neither ``base_rates`` nor ``control`` is broadcast: a scalar is rejected.
 
     Parameters
     ----------
-    eta : float or array_like, shape (4,)
-        Base rates, finite and non-negative, at least one positive.  A scalar is repeated for all
-        four degree groups.
-    deg : ndarray of int, shape (p,)
-        Degree of each feature, values in ``0..3`` (see :func:`stable_cl.features.poly_features`).
-    control : array_like, shape (4,), optional
+    base_rates : array_like, shape (G,)
+        Base rates per group, finite and non-negative, at least one positive.  If a global
+        learning rate applies, it must already be a factor of these rates.
+    group : ndarray of int, shape (p,)
+        Group index of each feature, values in ``0..G-1``.
+    control : array_like, shape (G,), optional
         Degree-control factors in ``[0, 1]``.
 
     Returns
     -------
     ndarray, shape (p,)
-        The vector ``d`` with :math:`d_j = \eta_{\deg(j)} m_{\deg(j)} \ge 0`.
+        The vector ``d`` with :math:`d_j = \eta_{g(j)} m_{g(j)} \ge 0`.
 
     Raises
     ------
     TypeError
-        If ``eta`` or ``control`` contains booleans, complex numbers or strings.
+        If ``base_rates`` or ``control`` contains booleans, complex numbers or strings.
     ValueError
-        If shapes, finiteness or ranges are violated, or ``deg`` is not a 1-D integer array
-        with values in ``0..3``.
+        If shapes, finiteness or ranges are violated, a scalar is passed for ``base_rates`` or
+        ``control``, or ``group`` is not a 1-D integer array with values in ``0..G-1``.
     """
-    e = _real(eta, "learning rates")
-    if e.ndim == 0:
-        e = np.full(N_GROUPS, float(e))
+    e = _real(base_rates, "base rates")
     if (
-        e.shape != (N_GROUPS,)
+        e.ndim != 1
+        or e.size < 1
         or not np.isfinite(e).all()
         or (e < 0).any()
         or not (e > 0).any()
     ):
         raise ValueError(
-            f"learning rates: {N_GROUPS} finite non-negative values, one positive"
+            "base rates: a 1-D array of G >= 1 finite non-negative values, one positive"
         )
+    n_groups = e.size
     if control is not None:
         m = _real(control, "degree-control factors")
         if (
-            m.shape != (N_GROUPS,)
+            m.shape != (n_groups,)
             or not np.isfinite(m).all()
             or ((m < 0) | (m > 1)).any()
         ):
             raise ValueError(
-                f"degree-control factors: {N_GROUPS} finite values in [0, 1]"
+                f"degree-control factors: {n_groups} finite values in [0, 1]"
             )
         e = e * m
-    deg = np.asarray(deg)
+    group = np.asarray(group)
     if (
-        deg.ndim != 1
-        or deg.dtype.kind not in "iu"
-        or (deg.size and (deg.min() < 0 or deg.max() >= N_GROUPS))
+        group.ndim != 1
+        or group.dtype.kind not in "iu"
+        or (group.size and (group.min() < 0 or group.max() >= n_groups))
     ):
         raise ValueError(
-            f"deg must be a 1-D integer array with values in 0..{N_GROUPS - 1}"
+            f"group must be a 1-D integer array with values in 0..{n_groups - 1}"
         )
-    return e[deg]
+    return e[group]
 
 
 def null_basis(R, d, tol=1e-10):
@@ -189,8 +193,9 @@ def null_basis(R, d, tol=1e-10):
 
     The returned :math:`N` has the right-singular vectors :math:`v_i`, :math:`i > k`, as columns
     (all of :math:`\operatorname{null}(A)` is included, because the full SVD is used).  The
-    threshold :math:`\text{tol}\cdot\max(\sigma_1, 1)` is the convention of the ``polynomial_cl``
-    PR.  With ``tol`` around ``1e-10`` the result is :math:`\operatorname{null}(A)` up to round-off
+    threshold :math:`\text{tol}\cdot\max(\sigma_1, 1)` is inherited from the earlier
+    ``polynomial_cl`` implementation; it is not invariant under a rescaling of ``d`` when
+    :math:`\sigma_1 < 1`.  With ``tol`` around ``1e-10`` the result is :math:`\operatorname{null}(A)` up to round-off
     (*exact*); with ``tol > 0`` large it additionally keeps directions that :math:`A` only weakly
     sees (*relaxed*), and then :math:`\|A N\|_2 \le \text{tol}\cdot\max(\sigma_1, 1)`.
 
@@ -242,7 +247,39 @@ def null_basis(R, d, tol=1e-10):
     return vt[int((s > tol * max(float(s[0]), 1.0)).sum()) :].T
 
 
-def null_step(G, N, d, beta=0.0):
+def ordinary_step(G, d):
+    r"""Ordinary rate-weighted step (returned **unsigned**).
+
+    .. math::
+
+        S = D\,G, \qquad \Delta W = -S .
+
+    The caller *subtracts* the returned array from the weights.  Up to round-off this equals
+    :func:`relaxed_step` with ``beta=1`` for every basis ``N``.
+
+    Parameters
+    ----------
+    G : ndarray, shape (p, K)
+        Minibatch gradient.
+    d : ndarray, shape (p,)
+        Effective diagonal rates, :math:`d \ge 0`, learning rate included.
+
+    Returns
+    -------
+    ndarray, shape (p, K)
+        The step :math:`S`.
+
+    Raises
+    ------
+    ValueError
+        If ``G`` is not a finite 2-D array, ``d`` is not a finite non-negative vector of length
+        ``G.shape[0]``.
+    """
+    _check_matrix_and_rates(G, d, "G")
+    return np.asarray(d)[:, None] * np.asarray(G)
+
+
+def relaxed_step(G, N, d, beta=0.0):
     r"""Rate-weighted, relaxed null-space step (returned **unsigned**).
 
     With :math:`P = N N^\top`, :math:`u = D^{1/2} G`, the function returns
@@ -268,7 +305,7 @@ def null_step(G, N, d, beta=0.0):
         checked; orthonormality is *assumed* and not verified, because checking it on every
         minibatch would be wasteful and the basis is built once per experience.
     d : ndarray, shape (p,)
-        Diagonal rates, :math:`d \ge 0`.
+        Effective diagonal rates, :math:`d \ge 0`, learning rate included.
     beta : float, default 0.0
         Relaxation in ``[0, 1]``.
 
@@ -279,12 +316,16 @@ def null_step(G, N, d, beta=0.0):
 
     Raises
     ------
+    TypeError
+        If ``beta`` is a boolean, complex number or string.
     ValueError
-        If ``beta`` is outside ``[0, 1]``, the shapes of ``G`` (p, K), ``N`` (p, q) and
+        If ``beta`` is not a scalar in ``[0, 1]``, the shapes of ``G`` (p, K), ``N`` (p, q) and
         ``d`` (p,) are incompatible, or ``N`` contains non-finite values.
     """
-    if not 0.0 <= beta <= 1.0:
-        raise ValueError("beta must lie in [0, 1]")
+    beta = _real(beta, "beta")
+    if beta.ndim != 0 or not 0.0 <= beta <= 1.0:
+        raise ValueError("beta must be a scalar in [0, 1]")
+    beta = float(beta)
     _check_matrix_and_rates(G, d, "G")
     if np.ndim(N) != 2 or np.shape(N)[0] != len(d):
         raise ValueError("N must be 2-D with N.shape[0] == len(d)")
@@ -293,6 +334,44 @@ def null_step(G, N, d, beta=0.0):
     root = np.sqrt(d)[:, None]
     rg = root * G
     return root * (beta * rg + (1.0 - beta) * (N @ (N.T @ rg)))
+
+
+def spectral_bound(R, d, N):
+    r"""Achieved spectral norm :math:`\|A N\|_2` for :math:`A = R D^{1/2}`.
+
+    This is the *computed* quantity, not the threshold used to build ``N``.  It is the
+    :math:`\tau` that the relaxed residual bound (``math.tex``, Proposition 2) actually needs:
+    ``N`` satisfies the spectral assumption A4 for any :math:`\tau \ge \|A N\|_2`.
+
+    Parameters
+    ----------
+    R : ndarray, shape (m_R, p)
+        Reference features, one example per row.
+    d : ndarray, shape (p,)
+        Effective diagonal rates, :math:`d \ge 0`.
+    N : ndarray, shape (p, q)
+        Null-space basis from :func:`null_basis`.
+
+    Returns
+    -------
+    float
+        :math:`\|A N\|_2`, or ``0.0`` if ``R`` has no rows or ``N`` has no columns.
+
+    Raises
+    ------
+    ValueError
+        If ``R`` is not a finite 2-D array with at least one column, ``d`` is not a finite
+        non-negative vector of length ``R.shape[1]``, or ``N`` is not a finite 2-D array with
+        ``N.shape[0] == len(d)``.
+    """
+    R, d, N = np.asarray(R), np.asarray(d), np.asarray(N)
+    if np.ndim(R) == 2 and R.shape[1] < 1:
+        raise ValueError("R must have at least one column")
+    _check_matrix_and_rates(R.T, d, "R.T")
+    _check_matrix_and_rates(N, d, "N")
+    if R.shape[0] == 0 or N.shape[1] == 0:
+        return 0.0
+    return float(np.linalg.norm((R * np.sqrt(d)) @ N, 2))
 
 
 def free_dim(N, d):
