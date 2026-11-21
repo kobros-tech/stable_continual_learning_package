@@ -8,7 +8,8 @@ test of what ``null_basis`` returns; none of it is a proof.  Each test names the
 (A2-A5, see ``docs/traceability.md``) or the proposition it checks.
 
 Tolerance convention (identical in ``null_basis``, ``math.tex`` and these tests):
-``tau = tol * max(sigma_1, 1)`` with ``sigma_1`` the largest singular value of ``A = R D^{1/2}``.
+``tau = tol * sigma_1`` with ``sigma_1`` the largest singular value of ``A = R D^{1/2}``
+(relative, so invariant under rescaling of ``R`` or ``d``; ``tol`` lies in ``[0, 1)``).
 """
 
 import numpy as np
@@ -19,7 +20,10 @@ from stable_cl import diagonal_rates, null_basis, relaxed_step
 NULL_RESIDUAL_TOL = 1e-9  # A2: ||A N|| on exact-null fixtures
 ORTHO_TOL = 1e-9  # A3: ||N^T N - I||
 COMPLETENESS_TOL = 1e-9  # A5: ||N N^T V - V||
-SLACK = 1e-9  # floating-point slack on the A4 / residual inequalities
+SLACK = 1e-9  # floating-point slack on the residual inequalities
+RELATIVE_SLACK = (
+    1e-12  # round-off slack on A4, in units of sigma_1 (about 4500 machine epsilons)
+)
 
 
 def make_case(seed, p=24, rows=9, scale=1.0, rank=None, frozen=0):
@@ -44,14 +48,19 @@ def make_case(seed, p=24, rows=9, scale=1.0, rank=None, frozen=0):
 def tau_of(R, d, tol):
     A = R * np.sqrt(d)
     sigma1 = np.linalg.svd(A, compute_uv=False)[0] if A.size else 0.0
-    return tol * max(float(sigma1), 1.0)
+    return tol * float(sigma1)
+
+
+def sigma1_of(R, d):
+    A = R * np.sqrt(d)
+    return float(np.linalg.svd(A, compute_uv=False)[0]) if A.size else 0.0
 
 
 def independent_null_space(A, rel=1e-10):
     """Orthonormal basis of null(A) computed by a different route (QR of A^T), not ``null_basis``."""
     Q, Rr = np.linalg.qr(A.T, mode="complete")
     diag = np.abs(np.diag(Rr)) if Rr.size else np.array([])
-    rank = int((diag > rel * max(diag.max(initial=0.0), 1.0)).sum())
+    rank = int((diag > rel * diag.max(initial=0.0)).sum())
     return Q[:, rank:]
 
 
@@ -119,7 +128,9 @@ def test_a4_spectral_norm_of_A_N_is_at_most_tau(case, tol):
     N = null_basis(R, d, tol)
     if N.shape[1] == 0:
         return  # empty basis: A N is the empty product, bound holds trivially
-    assert np.linalg.norm(A @ N, 2) <= tau_of(R, d, tol) + SLACK
+    # explicit round-off slack, relative to sigma_1 so that it cannot swamp a small tau
+    bound = tau_of(R, d, tol) + RELATIVE_SLACK * sigma1_of(R, d)
+    assert np.linalg.norm(A @ N, 2) <= bound
 
 
 @pytest.mark.parametrize("tol", [1e-3, 0.03, 0.3])
@@ -136,7 +147,7 @@ def test_cutoff_consistency_links_the_svd_threshold_to_a4(case, tol):
     assert N.shape[1] == A.shape[1] - k
     if N.shape[1]:
         sigma_next = s[k] if k < len(s) else 0.0
-        assert np.linalg.norm(A @ N, 2) <= max(sigma_next, 0.0) + SLACK
+        assert np.linalg.norm(A @ N, 2) <= sigma_next + RELATIVE_SLACK * sigma1_of(R, d)
         assert sigma_next <= tau
 
 
@@ -236,11 +247,14 @@ def test_zero_gradient_gives_a_zero_step():
         assert not relaxed_step(np.zeros((len(d), 3)), N, d, beta).any()
 
 
-def test_tau_convention_is_exercised_below_one():
-    # sigma_1 < 1: the max(sigma_1, 1) branch makes tau = tol, not tol * sigma_1.
+def test_tau_is_relative_to_sigma1_also_below_one():
+    # sigma_1 < 1: tau = tol * sigma_1 (smaller than tol), and rescaling R leaves N N^T unchanged.
     R, d, _ = make_case(0, scale=0.01)
-    sigma1 = np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0]
-    assert sigma1 < 1 and tau_of(R, d, 0.3) == 0.3
+    sigma1 = sigma1_of(R, d)
+    assert sigma1 < 1 and np.isclose(tau_of(R, d, 0.3), 0.3 * sigma1)
+    assert tau_of(R, d, 0.3) < 0.3
+    N, N_big = null_basis(R, d, 0.3), null_basis(1e4 * R, d, 0.3)
+    assert N.shape == N_big.shape and np.allclose(N @ N.T, N_big @ N_big.T, atol=1e-9)
 
 
 @pytest.mark.parametrize("rank", [None, 4])
@@ -262,8 +276,8 @@ def test_make_case_applies_scale_exactly_once(scale, rank, frozen):
 @pytest.mark.parametrize("beta", [0.0, 0.5])
 @pytest.mark.parametrize("seed", range(3))
 def test_relaxed_residual_bound_with_sigma1_around_one(seed, beta, tol, target):
-    # The scaled cases above have sigma_1 from about 0.07 to 3500, so none sits at the branch
-    # point of tau = tol * max(sigma_1, 1). Here R is rescaled so that sigma_1 = 0.5, 1 and 2.
+    # The scaled cases above have sigma_1 from about 0.07 to 3500. Here R is rescaled so that
+    # sigma_1 = 0.5, 1 and 2, around the point where the earlier max(sigma_1, 1) rule changed branch.
     R, d, G = make_case(seed, rank=4, frozen=5)
     R = R * (target / np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0])
     assert np.isclose(np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0], target)

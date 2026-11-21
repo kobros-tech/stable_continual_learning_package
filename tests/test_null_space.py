@@ -10,13 +10,13 @@ from stable_cl import diagonal_rates, free_dim, null_basis, relaxed_step
 
 
 def numerical_rank(A, tol=1e-10):
-    """Rank of ``A`` under the *same* threshold as ``null_basis``: ``s > tol * max(s_1, 1)``.
+    """Rank of ``A`` under the *same* threshold as ``null_basis``: ``s > tol * s_1``.
 
     ``np.linalg.matrix_rank`` uses ``s_1 * max(A.shape) * eps`` instead; the two conventions can
     disagree on near-null singular values, so the completeness checks must not mix them.
     """
     s = np.linalg.svd(A, compute_uv=False)
-    return int((s > tol * max(float(s[0]), 1.0)).sum()) if s.size else 0
+    return int((s > tol * float(s[0])).sum()) if s.size else 0
 
 
 @pytest.fixture
@@ -118,14 +118,14 @@ def test_exact_step_is_the_constrained_minimiser(setup, rng):
 
 @pytest.mark.parametrize("scale", [0.01, 1.0, 100.0])
 def test_relaxed_logit_change_respects_the_spectral_bound(setup, scale):
-    # tau = tol * max(sigma_1, 1) is the threshold of `null_basis` and `math.tex`. The scales
-    # put sigma_1 below, near and above 1, so the `max(., 1)` branch is actually exercised.
+    # tau = tol * sigma_1 is the threshold of `null_basis` and `math.tex`. The scales put sigma_1
+    # below, near and above 1; the bound must hold on both sides because tau is relative.
     R, G, d, _ = setup
     R = scale * R
     b, tol = 0.3, 0.3
     Nt = null_basis(R, d, tol)
     sigma1 = np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0]
-    tau = tol * max(sigma1, 1.0)
+    tau = tol * sigma1
     rg = np.sqrt(d)[:, None] * G
     gap = np.linalg.norm(R @ relaxed_step(G, Nt, d, b) - b * R @ (d[:, None] * G))
     assert gap <= (1 - b) * tau * np.linalg.norm(rg) + 1e-9
@@ -133,7 +133,7 @@ def test_relaxed_logit_change_respects_the_spectral_bound(setup, scale):
 
 def test_larger_tolerance_gives_larger_basis(setup):
     R, _, d, _ = setup
-    dims = [null_basis(R, d, tol).shape[1] for tol in (1e-10, 0.03, 0.3, 3.0)]
+    dims = [null_basis(R, d, tol).shape[1] for tol in (1e-10, 0.03, 0.3, 0.9)]
     assert dims == sorted(dims)
 
 
@@ -197,7 +197,7 @@ def test_very_small_singular_values_are_treated_as_null_according_to_tol():
     bound = 1e-10 * np.linalg.norm(G)
     assert (
         np.linalg.norm(R @ relaxed_step(G, N, d, 0.0)) <= bound
-    )  # ||A N|| <= tol * max(s1, 1)
+    )  # ||A N|| <= tol * s1
 
 
 def test_zero_effective_rates_with_reference_data_give_a_free_basis_and_a_zero_step(
@@ -210,7 +210,9 @@ def test_zero_effective_rates_with_reference_data_give_a_free_basis_and_a_zero_s
     assert free_dim(N, d) == 0
 
 
-@pytest.mark.parametrize("tol", [-1e-3, np.nan, np.inf, -np.inf, [1e-3, 1e-3]])
+@pytest.mark.parametrize(
+    "tol", [-1e-3, np.nan, np.inf, -np.inf, 1.0, 1.5, 3.0, [1e-3, 1e-3]]
+)
 def test_invalid_tolerance_is_rejected(tol):
     with pytest.raises(ValueError):
         null_basis(np.eye(3), np.ones(3), tol)

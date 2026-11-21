@@ -86,7 +86,7 @@ def test_spectral_bound_is_the_largest_singular_value_of_A_N(problem, tol):
     N = null_basis(R, d, tol)
     A = R * np.sqrt(d)
     s = np.linalg.svd(A, compute_uv=False)
-    k = int((s > tol * max(s[0], 1.0)).sum())
+    k = int((s > tol * s[0]).sum())
     expected = float(s[k]) if k < len(s) else 0.0  # sigma_{k+1}: first discarded value
     got = spectral_bound(R, d, N)
     assert isinstance(got, float)
