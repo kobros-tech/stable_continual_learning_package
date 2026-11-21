@@ -19,16 +19,27 @@ residual bound holds under the assumptions stated in `math.tex` and `formal/`.
 
 | path                        | role                                                                                   |
 | --------------------------- | -------------------------------------------------------------------------------------- |
-| `stable_cl/optimization.py` | `diagonal_rates`, `null_basis`, `null_step`, `free_dim`: the rates and the update      |
-| `stable_cl/features.py`     | `poly_features`, `expand`: degree-ordered polynomial features, zero-initialised growth |
+| `stable_cl/optimization.py` | `diagonal_rates`, `null_basis`, `ordinary_step`, `relaxed_step`, `spectral_bound`, `free_dim` |
 | `tests/`                    | pytest suite: numerical properties of every function; `test_assumptions.py` checks A2-A5 |
 | `formal/`                   | Lean 4 + Mathlib proofs about the exact update (M0-M5); see `formal/README.md`         |
 | `docs/traceability.md`      | claim, Lean statement, numerical test: kept as separate evidence                       |
 | `math.tex`                  | specification: definitions, propositions, proofs                                       |
-| `explain.tex`               | explanation written for the package as it was before the experiment code was removed   |
+| `explain.tex`               | legacy explanation, written for the package before the experiment code was removed   |
 
 Every function has a docstring with its purpose, argument shapes, return value and, where it
 implements a mathematical operation, the equation (Sphinx `.. math::` syntax), as in `math.tex`.
+
+## Public API
+
+Effective rates `d` (learning rate included) are the only rate input; no step applies another rate.
+
+| function                              | meaning                                                              |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| `diagonal_rates(base_rates, group, control=None)` | `d_j = η_g m_g`; the group count is `len(base_rates)`, no scalar broadcast |
+| `null_basis(R, d, tol)`               | orthonormal numerical null space `N` of `A = R D^{1/2}`              |
+| `ordinary_step(G, d)`                 | `D G` (unsigned; `ΔW = -step`)                                       |
+| `relaxed_step(G, N, d, beta)`         | `D^{1/2}[P + β(I − P)]D^{1/2}G` (unsigned)                           |
+| `spectral_bound(R, d, N)`             | the achieved `‖A N‖₂`                                                |
 
 ## Three kinds of evidence
 
@@ -40,8 +51,9 @@ implements a mathematical operation, the equation (Sphinx `.. math::` syntax), a
 
 ## Run the tests
 
-Requires Python 3.11 or newer with NumPy (`pytest` for the tests). The package is not yet
-pip-installable; `pythonpath = ["."]` in `pyproject.toml` makes `stable_cl` importable.
+Requires Python 3.11 or newer with NumPy (`pytest` for the tests). `pip install .` installs the
+package (numpy only); inside a checkout, `pythonpath = ["."]` in `pyproject.toml` makes `stable_cl`
+importable for the tests.
 
 ```bash
 python -m pytest                  # numerical tests (seconds)
