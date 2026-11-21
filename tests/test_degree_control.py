@@ -22,8 +22,38 @@ def test_all_ones_control_reproduces_uncontrolled_rates(deg, rates):
     assert np.array_equal(diagonal_rates(eta, deg, [1] * 4), diagonal_rates(eta, deg))
 
 
-def test_scalar_rate_is_repeated_for_every_degree(deg):
-    assert np.array_equal(diagonal_rates(2.0, deg), np.full(len(deg), 2.0))
+@pytest.mark.parametrize("bad", [2.0, 2, np.float64(2.0)])
+def test_scalar_base_rate_is_rejected_and_never_broadcast(deg, bad):
+    with pytest.raises(ValueError):
+        diagonal_rates(bad, deg)
+
+
+@pytest.mark.parametrize("n_groups", [1, 2, 3, 6])
+def test_group_count_is_inferred_from_the_base_rates(n_groups):
+    rng = np.random.default_rng(n_groups)
+    eta = rng.uniform(0.5, 3.0, n_groups)
+    m = rng.uniform(0.0, 1.0, n_groups)
+    group = rng.integers(0, n_groups, 30)
+    assert np.array_equal(diagonal_rates(eta, group, m), (eta * m)[group])
+    assert np.array_equal(diagonal_rates(eta, group), eta[group])
+
+
+def test_group_index_must_fit_the_inferred_group_count():
+    with pytest.raises(ValueError):
+        diagonal_rates([1.0, 2.0, 3.0], np.array([0, 3]))
+    assert np.array_equal(diagonal_rates([1.0, 2.0, 3.0], np.array([2, 0])), [3.0, 1.0])
+
+
+def test_control_length_must_match_the_group_count():
+    with pytest.raises(ValueError):
+        diagonal_rates([1.0, 2.0, 3.0], np.array([0, 1, 2]), [1, 1, 1, 1])
+    with pytest.raises(ValueError):
+        diagonal_rates([1.0, 2.0, 3.0, 4.0], np.array([0, 1, 2]), [1, 1, 1])
+
+
+def test_boolean_group_index_is_rejected(rates):
+    with pytest.raises(ValueError):
+        diagonal_rates(rates[0], np.array([True, False]))
 
 
 def test_zero_factor_freezes_a_degree(deg, rates):
