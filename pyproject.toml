@@ -1,9 +1,9 @@
 [project]
 name = "stable-continual-learning"
 version = "0.2.0"
-description = "Class-incremental polynomial classifier: ordinary SGD vs strategy_b null-space step"
+description = "Diagonal-rate null-space update for continual learning (numpy implementation of the formalised update)"
 requires-python = ">=3.11"
-dependencies = ["numpy", "scipy", "scikit-learn"]
+dependencies = ["numpy"]
 
 [project.optional-dependencies]
 test = ["pytest"]
