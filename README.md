@@ -1,51 +1,57 @@
 # Stable continual learning package
 
-Class-incremental digits (five experiences) with degree-balanced polynomial features. It
-compares ordinary SGD with `strategy_b` (null-space step) under the diagonal degree-control
-rate `d_j = eta_deg(j) * m_deg(j)` of the `polynomial_cl` `diagonal_control` PR. The earlier
-"null-space" update is `strategy_b` (beta = 0, tol -> 0); `tol > 0` and `beta > 0` are named
-relaxations. Mathematics: `math.tex`. Full explanation: `explain.tex`. Both are LaTeX sources;
-the PDFs are not committed and are built locally (see below).
+The mathematical update for stable continual learning: a diagonal-rate null-space step, its numpy
+implementation, and its Lean 4 formalisation. This repository does not contain an experiment
+framework or benchmarks.
+
+The update, with `D = diag(d)`, `A = R D^{1/2}`, `P = N Nᵀ` (`N` an orthonormal basis of a numerical
+null space of `A`) and relaxation `β`, is
+
+```text
+ΔW = -D^{1/2} [P + β (I - P)] D^{1/2} G
+```
+
+`β = 0` is the exact step (reference-preserving when `A N = 0`), `β = 1` is rate-weighted SGD, and
+`0 < β < 1` is the relaxed step. The relaxed step is not unconditionally reference-preserving; its
+residual bound holds under the assumptions stated in `math.tex` and `formal/`.
 
 ## Layout
 
-| path                      | role                                                                                |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| `stable_cl/features.py`   | `poly_features`, `expand`: degree-ordered polynomial features, zero-initialised growth |
-| `stable_cl/optimization.py` | `diagonal_rates`, `null_basis`, `null_step`, `free_dim`: the rates and the update |
-| `stable_cl/training.py`   | `softmax`, `train_task`: replay minibatches and one experience of training          |
-| `stable_cl/experiment.py` | `load_digits_features`, `run`, `demo`: data, the five experiences, metrics          |
-| `benchmark.py`            | validation tuning, paired test comparisons, degree-control selection                |
-| `tests/`                  | pytest suite (numerical properties of every function; `test_assumptions.py` checks A2-A5) |
-| `formal/`                 | Lean 4 + Mathlib proofs about the exact update (M0-M5); see `formal/README.md`     |
-| `docs/`                   | `traceability.md` (claim, proof, test, experiment), `benchmark_protocol.md`         |
-| `math.tex`                | specification: definitions, propositions, proofs, results                           |
-| `explain.tex`             | full explanation of the package (features, replay, null-space update, experiments)  |
+| path                        | role                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `stable_cl/optimization.py` | `diagonal_rates`, `null_basis`, `null_step`, `free_dim`: the rates and the update      |
+| `stable_cl/features.py`     | `poly_features`, `expand`: degree-ordered polynomial features, zero-initialised growth |
+| `tests/`                    | pytest suite: numerical properties of every function; `test_assumptions.py` checks A2-A5 |
+| `formal/`                   | Lean 4 + Mathlib proofs about the exact update (M0-M5); see `formal/README.md`         |
+| `docs/traceability.md`      | claim, Lean statement, numerical test: kept as separate evidence                       |
+| `math.tex`                  | specification: definitions, propositions, proofs                                       |
+| `explain.tex`               | explanation written for the package as it was before the experiment code was removed   |
 
 Every function has a docstring with its purpose, argument shapes, return value and, where it
-implements a mathematical operation, the equation (Sphinx `.. math::` syntax). The equations are
-the same ones as in `math.tex`.
+implements a mathematical operation, the equation (Sphinx `.. math::` syntax), as in `math.tex`.
 
-## Run the code
+## Three kinds of evidence
 
-Requires Python 3.11 or newer with NumPy, SciPy and scikit-learn (`pytest` for the tests).
+- **Proven**: a Lean theorem from explicit assumptions (`formal/`).
+- **Tested**: a pytest checks the numerical implementation up to floating-point tolerance. It does
+  not prove the assumptions or the conclusion.
+- **Observed**: an experiment on data. This repository contains no experiments; the earlier
+  observations are historical (see below) and are not evidence for any later API or paper.
+
+## Run the tests
+
+Requires Python 3.11 or newer with NumPy (`pytest` for the tests). The package is not yet
+pip-installable; `pythonpath = ["."]` in `pyproject.toml` makes `stable_cl` importable.
 
 ```bash
-python -m pytest                  # test suite (seconds)
-python -m stable_cl    # demo: three methods on one split
-python benchmark.py --out results/benchmark_raw.json  # several minutes on one CPU core
-python benchmark.py --report results/benchmark_raw.json  # reprint the full report from raw results
+python -m pytest                  # numerical tests (seconds)
 ```
 
-One test compares a `strategy_b` step with the PR implementation. It is skipped, with the reason
-shown by `pytest -rs`, unless the importable `polynomial_cl` is the `diagonal_control` PR version
-(it needs `apply_degree_control`, `step_scale_for`, `degree_of_feature`, `fit_task`,
-`null_space_basis`), e.g.
-`PYTHONPATH=/path/to/polynomial_cl_core-diagonal_control/src python -m pytest tests/test_pr_parity.py`.
+## Legacy experiment code
 
-The `benchmark` workflow runs the benchmark on a clean checkout and uploads the raw results,
-console output, regenerated report and environment as a downloadable artifact; see
-`docs/benchmark_protocol.md`. `tools/check_benchmark_artifact.py` audits a downloaded artifact.
+The earlier experiment runner, training loop, benchmark and benchmark workflow, together with their
+historical results, were removed from this repository. They are preserved at the Git tag
+`legacy-m7-benchmark`. Experiments belong to `polynomial_cl_core`; this repository will not run them.
 
 ## Build the PDFs
 
@@ -58,11 +64,5 @@ pdflatex math.tex && pdflatex math.tex
 pdflatex explain.tex && pdflatex explain.tex
 ```
 
-or `latexmk -pdf math.tex explain.tex`. Delete the `.aux`, `.log` and `.out` files afterwards if
-you do not want them in the repository.
-
-## Keeping the documents in sync
-
-The numbers in section 5 of `math.tex` and in `explain.tex` come from `python benchmark.py` and
-`python -m stable_cl`; if the code or the protocol changes, rerun them, update those
-numbers, and rebuild the PDFs.
+or `latexmk -pdf math.tex explain.tex`. The PDFs are not committed. Delete the `.aux`, `.log` and
+`.out` files afterwards if you do not want them in the repository.
