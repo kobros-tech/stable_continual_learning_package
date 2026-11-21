@@ -14,7 +14,7 @@ Tolerance convention (identical in ``null_basis``, ``math.tex`` and these tests)
 import numpy as np
 import pytest
 
-from stable_cl import diagonal_rates, null_basis, null_step
+from stable_cl import diagonal_rates, null_basis, relaxed_step
 
 NULL_RESIDUAL_TOL = 1e-9  # A2: ||A N|| on exact-null fixtures
 ORTHO_TOL = 1e-9  # A3: ||N^T N - I||
@@ -149,7 +149,7 @@ def test_relaxed_residual_bound_over_a_beta_grid(case, tol, beta):
     N = null_basis(R, d, tol)
     root = np.sqrt(d)[:, None]
     u = root * G
-    dW = -null_step(G, N, d, beta)
+    dW = -relaxed_step(G, N, d, beta)
     gap = np.linalg.norm(R @ dW + beta * (R * np.sqrt(d)) @ u)
     assert gap <= (1 - beta) * tau_of(R, d, tol) * np.linalg.norm(u) + SLACK
 
@@ -162,7 +162,7 @@ def test_strict_step_approximate_preservation_is_the_beta_zero_case(case, tol):
     N = null_basis(R, d, tol)
     u = np.sqrt(d)[:, None] * G
     assert (
-        np.linalg.norm(R @ null_step(G, N, d, 0.0))
+        np.linalg.norm(R @ relaxed_step(G, N, d, 0.0))
         <= tau_of(R, d, tol) * np.linalg.norm(u) + SLACK
     )
 
@@ -176,7 +176,7 @@ def test_descent_value_matches_the_closed_form_and_is_nonnegative(case, beta):
     u = np.sqrt(d)[:, None] * G
     Pu = N @ (N.T @ u)
     value = beta * np.sum(u**2) + (1 - beta) * np.sum(Pu**2)
-    inner = np.sum(G * null_step(G, N, d, beta))  # <G, S> = -<G, dW>
+    inner = np.sum(G * relaxed_step(G, N, d, beta))  # <G, S> = -<G, dW>
     assert np.isclose(inner, value, rtol=1e-9, atol=1e-9)
     assert inner >= -SLACK
 
@@ -188,7 +188,7 @@ def test_strict_step_beats_random_feasible_perturbations(case):
     N = null_basis(R, d)
     S = d > 0
     root = np.sqrt(d)[:, None]
-    step = null_step(G, N, d, 0.0)  # the update is -step
+    step = relaxed_step(G, N, d, 0.0)  # the update is -step
 
     def J(Z):
         return np.sum(G * Z) + 0.5 * np.sum(Z[S] ** 2 / d[S][:, None])
@@ -207,7 +207,7 @@ def test_strict_step_beats_random_feasible_perturbations(case):
 def test_frozen_rows_are_exactly_zero(beta):
     R, d, G = make_case(2, frozen=7)
     N = null_basis(R, d)
-    assert not null_step(G, N, d, beta)[:7].any()
+    assert not relaxed_step(G, N, d, beta)[:7].any()
 
 
 def test_empty_null_space_gives_the_zero_strict_step_and_sgd_for_beta_one():
@@ -216,8 +216,8 @@ def test_empty_null_space_gives_the_zero_strict_step_and_sgd_for_beta_one():
     R, d, G = np.eye(p), np.ones(p), rng.normal(size=(p, 2))
     N = null_basis(R, d)
     assert N.shape == (p, 0)
-    assert not null_step(G, N, d, 0.0).any()
-    assert np.allclose(null_step(G, N, d, 1.0), d[:, None] * G)
+    assert not relaxed_step(G, N, d, 0.0).any()
+    assert np.allclose(relaxed_step(G, N, d, 1.0), d[:, None] * G)
 
 
 def test_trivial_reference_gives_the_identity_projector():
@@ -226,14 +226,14 @@ def test_trivial_reference_gives_the_identity_projector():
     R, d, G = np.zeros((3, p)), rng.uniform(0.5, 2, p), rng.normal(size=(p, 2))
     N = null_basis(R, d)
     assert np.allclose(N @ N.T, np.eye(p))
-    assert np.allclose(null_step(G, N, d, 0.0), d[:, None] * G)
+    assert np.allclose(relaxed_step(G, N, d, 0.0), d[:, None] * G)
 
 
 def test_zero_gradient_gives_a_zero_step():
     R, d, _ = make_case(0)
     N = null_basis(R, d)
     for beta in (0.0, 0.5, 1.0):
-        assert not null_step(np.zeros((len(d), 3)), N, d, beta).any()
+        assert not relaxed_step(np.zeros((len(d), 3)), N, d, beta).any()
 
 
 def test_tau_convention_is_exercised_below_one():
@@ -269,7 +269,7 @@ def test_relaxed_residual_bound_with_sigma1_around_one(seed, beta, tol, target):
     assert np.isclose(np.linalg.svd(R * np.sqrt(d), compute_uv=False)[0], target)
     N = null_basis(R, d, tol)
     u = np.sqrt(d)[:, None] * G
-    dW = -null_step(G, N, d, beta)
+    dW = -relaxed_step(G, N, d, beta)
     gap = np.linalg.norm(R @ dW + beta * (R * np.sqrt(d)) @ u)
     assert gap <= (1 - beta) * tau_of(R, d, tol) * np.linalg.norm(u) + SLACK
 

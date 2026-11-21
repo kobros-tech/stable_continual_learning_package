@@ -10,6 +10,36 @@ Three evidence levels are tracked separately and are not interchangeable:
   historical results of the removed benchmark, preserved at the Git tag `legacy-m7-benchmark`. They
   are not regenerated here and are not evidence for any later API or paper.
 
+## Names: mathematical object, Lean, Python
+
+Proof evidence and numerical evidence are kept apart. A Lean declaration is never cited as evidence
+that a Python function is correct, and a pytest is never cited as proof of a theorem. Lean proves
+statements about the mathematical update from explicit assumptions; Python implements the numerical
+procedure; pytest checks that procedure. The first four rows below are objects the theorems talk
+about, the last two are procedures the theorems assume.
+
+| Mathematical object                         | Lean (proved, under assumptions)          | Python (implementation)  | Numerical evidence                           |
+| ------------------------------------------- | ----------------------------------------- | ------------------------ | -------------------------------------------- |
+| `d_j = η_g m_g`, `D = diag(d)`              | `rate` (`G = 4`, `Fin 4`)                 | `diagonal_rates`         | `tests/test_degree_control.py`               |
+| Ordinary step `D G`                         | `sgdStep`                                 | `ordinary_step`          | `tests/test_steps.py` (equals `β = 1`)       |
+| Relaxed step `D^{1/2}[P + β(I-P)]D^{1/2}G`  | `nullStep`                                | `relaxed_step`           | `tests/test_null_space.py`, `test_assumptions.py` |
+| `β = 1`, `β = 0`                            | `nullStep_one`, M3 `ref_preserved_exact`  | `relaxed_step(beta=...)` | same tests                                   |
+| Null-space basis `N`, `P = N Nᵀ`            | hypotheses A2-A5, never constructed       | `null_basis`             | A2-A5 tests (up to tolerance)                |
+| Achieved `‖A N‖₂` (the `τ` of A4)           | hypothesis A4                             | `spectral_bound`         | `tests/test_steps.py`                        |
+| Free dimension `r`                          | none (Prop 1(e))                          | `free_dim`               | pytest only                                  |
+| Zero-padding expansion `W ↦ [W; 0]`         | M1 (`Matrix.fromRows W 0`)                | none; numpy in the test  | `tests/test_expansion_logits.py`             |
+
+Lean keeps its own names (`nullStep`, `sgdStep`); the Python names are `relaxed_step` and
+`ordinary_step`. Python's `null_basis` is a numerical SVD routine, so the rows "uniqueness of the
+exact step" (M5) and "`N` is a null basis" are different claims with different evidence: M5 is a
+theorem that assumes A5, and A5 for the computed basis is checked by pytest only.
+
+Group counts. Python accepts any number `G ≥ 1` of rate groups. Lean states `rate` and the M2
+theorems about degree groups for `Fin 4` (`G = 4`) only. M3-M5 take an arbitrary `d : p → ℝ` and do
+not depend on `G`. For `G ≠ 4` the construction of `d` and the freezing and prefix claims are
+covered by pytest only (`test_group_count_is_inferred_from_the_base_rates`). Generalising `Fin 4`
+in Lean is deferred and is not implied by this package.
+
 Lean status: "compiled" means `lake build` and the axiom audit passed in CI (M0-M3 on PR #3, M4-M5 on
 PR #5). It means
 Lean accepted the statement and proof. That the statement expresses the intended mathematics is a
@@ -22,7 +52,7 @@ results are separate evidence.
 | ID  | Assumption                                                          | Used by           | Checked by (pytest)                                                                                                                                             |
 | --- | ------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A0  | Rates are nonnegative: `η_g ≥ 0` and `m_g ≥ 0`, so `d_j ≥ 0`; the implementation additionally restricts `m_g ≤ 1` | M1-M3 do not need it; M4, M5 do | `test_invalid_control_factors_are_rejected` (`m`), `test_negative_base_rates_are_rejected` (`η`), `test_incompatible_null_basis_inputs_are_rejected` (negative `d`) |
-| A1  | Old features are a prefix of the expanded feature vector; old features keep their degree | M1, M2 (prefix)   | `test_lower_degree_features_are_a_prefix_of_higher_degree_features`, `test_features_are_ordered_by_degree`, `test_rates_are_prefix_stable`                       |
+| A1  | Old features are a prefix of the expanded feature vector; old features keep their degree | M1, M2 (prefix)   | Not checked in this repository: the feature map lives in `polynomial_cl_core`, whose tests must check that old features are a prefix of the new ones and keep their degree (cross-repo; not run by this repository's CI). Here only `test_rates_are_prefix_stable` checks that `diagonal_rates` is prefix-stable for a given group vector |
 | A2  | `A N = 0` for `A = R D^{1/2}` (exact null basis)                    | M3                | `test_null_basis_is_orthonormal_and_annihilated_by_A` (residual below `1e-9`, so the guarantee holds up to that tolerance, not exactly)                          |
 | A3  | `N^T N = I`                                                         | M4                | same test                                                                                                                                                       |
 | A4  | `‖A N‖₂ ≤ τ` for the relaxed basis, stated in Lean as `‖(A N) X‖_F ≤ τ ‖X‖_F` for all `X` | M4b           | `test_a4_spectral_norm_of_A_N_is_at_most_tau` (direct: `‖A N‖₂ ≤ τ`, 4 tolerances x 48 cases), `test_cutoff_consistency_links_the_svd_threshold_to_a4`, and indirectly `test_relaxed_logit_change_respects_the_spectral_bound` |
@@ -32,7 +62,7 @@ results are separate evidence.
 
 | Claim                                                  | `math.tex`      | Proven (Lean)                                                  | Tested (pytest)                                                                                        | Observed (historical) |
 | ------------------------------------------------------ | --------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
-| Zero-padded expansion preserves logits                 | §2              | M1 `expand_logits`, `expand_logits_matrix` (compiled)          | `test_expansion_preserves_logits_on_real_features`, `test_expansion_appends_zero_coefficients_and_keeps_old_ones` | n/a      |
+| Zero-padded expansion preserves logits                 | §2              | M1 `expand_logits`, `expand_logits_matrix` (compiled)          | `test_zero_padding_preserves_logits`, `test_zero_padding_keeps_old_coefficients_and_starts_new_ones_at_zero` (plain numpy, no feature map) | n/a      |
 | `d_j = 0` implies row `j` of `ΔW` is zero              | Prop 1(b)       | M2 `nullStep_row_eq_zero`, `sgdStep_row_eq_zero` (compiled)     | `test_frozen_rows_do_not_move`, `test_zero_factor_freezes_a_degree`                                    | n/a      |
 | `m_g = 0` freezes degree `g`                           | §2              | M2 `nullStep_frozen_of_control_zero` (compiled)                 | `test_zero_factor_freezes_a_degree`                                                                    | n/a      |
 | Rates are prefix-stable under expansion (needs A1)     | §2              | M2 `rate_prefix_stable` (compiled)                              | `test_rates_are_prefix_stable`                                                                         | n/a      |
@@ -66,8 +96,10 @@ results are separate evidence.
   it; both compiled in CI on PR #3 and are in the axiom audit. Theorems that use
   `D = D^{1/2} D^{1/2}` (M4, M5) take `∀ j, 0 ≤ d j` as an explicit hypothesis.
 - M4 and M5 compiled in CI on PR #5 and are in the axiom audit; their rows say so. They follow
-  `math.tex` Prop 1(c), 1(d), 2(a), 2(b), 2(c). Not covered by any Lean theorem: Prop 1(e) (rank of the free space)
-  and Prop 1(f) (parity with `polynomial_cl`; pytest only).
+  `math.tex` Prop 1(c), 1(d), 2(a), 2(b), 2(c). Not covered by any Lean theorem: Prop 1(e) (rank of the free space; pytest only)
+  and Prop 1(f) (correspondence with the earlier `polynomial_cl` implementation). Prop 1(f) had a parity
+  test that was removed together with the experiment code; it is currently not tested in this
+  repository, and the equivalence with `polynomial_cl_core` is to be established by core's tests.
 - Spectral bound (A4). Lean takes `‖A N‖₂ ≤ τ` as a hypothesis in its defining form. That the
   SVD threshold gives `‖A N‖₂ = σ_{k+1} ≤ τ` is not formalised; it is checked numerically.
 - Completeness (A5). Exact reference preservation (M3) needs only `A N = 0`. Constrained

@@ -12,32 +12,36 @@
 \DeclareMathOperator{\rank}{rank}
 \DeclareMathOperator{\diag}{diag}
 \DeclareMathOperator{\nul}{null}
-\title{Mathematical specification: null-space continual learning\\ is \texttt{strategy\_b} with diagonal degree control}
+\title{Mathematical specification: the relaxed null-space update\\ with diagonal rates}
 \author{}\date{}
 \begin{document}\maketitle
 
 \section{Scope}
-The package compares ordinary SGD with one constrained update, and exposes the diagonal
-degree-control mechanism of the \texttt{polynomial\_cl} \texttt{diagonal\_control} PR. The
-null-space update of the earlier package is the PR's \texttt{strategy\_b}: it is the same step
-at $\beta=0$ with a tolerance at machine level (Prop.~\ref{p:sb}). The two extra knobs the earlier
-package tuned, a spectral tolerance $\mathrm{tol}>0$ and a blend $\beta>0$, are \emph{relaxations}
-of \texttt{strategy\_b}; they are kept, named as such, and measured against it (\S\ref{s:emp}).
+This document specifies one update with two named methods. \emph{Ordinary} is rate-weighted SGD.
+\emph{Relaxed} is a null-space-restricted step with a relaxation $\beta\in[0,1]$: $\beta=1$ is ordinary
+for every basis, $\beta=0$ with a tolerance at machine level is the exact step that preserves the
+reference logits (Prop.~\ref{p:sb}), and $0<\beta<1$ or a spectral tolerance $\mathrm{tol}>0$ relax it
+(Prop.~\ref{p:rel}). Degree control only shapes the rate vector $d$ and is independent of the method.
+The exact step is the one the earlier code called \texttt{strategy\_b}; that name occurs only in the
+historical results of \S\ref{s:emp}.
 
 \section{Model and diagonal rates}
-Features $\phi(x)\in\R^p$ are ordered by degree; $\deg(j)\in\{0,1,2,3\}$ is the degree of feature
-$j$. The classifier is $W\in\R^{p\times K}$ with logits $z(x)=\phi(x)^\top W$, linear in $W$. For a
+Features $\phi(x)\in\R^p$ are ordered by degree; $\deg(j)\in\{0,\dots,G-1\}$ is the rate group of
+feature $j$ (the polynomial degree, $G=4$, in the experiments). The classifier is $W\in\R^{p\times K}$ with logits $z(x)=\phi(x)^\top W$, linear in $W$. For a
 minibatch $B$ with softmax probabilities $p_W$ over the seen classes,
 $G=\tfrac1{|B|}\sum_{i\in B}\phi(x_i)\,(p_W(\cdot\mid x_i)-e_{y_i})^\top$.
 
-\paragraph{Diagonal rate.} Base rates $\eta\in\R^4_{\ge0}$ (at least one positive) and degree-control
-factors $m\in[0,1]^4$ give
+\paragraph{Diagonal rate.} Base rates $\eta\in\R^G_{\ge0}$ (at least one positive) and degree-control
+factors $m\in[0,1]^G$ give
 \[
 d_j=\eta_{\deg(j)}\,m_{\deg(j)},\qquad D=\diag(d),\qquad D^{1/2}=\diag(\sqrt{d_j}).
 \]
 Only the vector $d$ is formed. Conventions (all enforced and tested): $m=\mathbf 1$ gives $d_j=\eta_{\deg(j)}$
 exactly; $m_g=0$ freezes degree group $g$; $d=0$ is a valid no-op experience; $\eta$ and $m$ must be
-real (no booleans or complex values), finite, $\eta\ge0$, $m\in[0,1]$, and $m$ is never broadcast.
+real (no booleans or complex values), finite, $\eta\ge0$, $m\in[0,1]$, and neither $\eta$ nor $m$ is
+broadcast. The vector $d$ is the \emph{effective} rate: it already contains every learning-rate factor,
+and no further rate multiplies a step. The Lean statement of this definition and of the degree-group
+theorems is for $G=4$ (\texttt{Fin 4}); the implementation accepts any $G\ge1$.
 The map $j\mapsto d_j$ is prefix-stable: a feature added by expansion takes the rate of its own degree
 and old features keep theirs. Expansion is $W\mapsto[W;0]$; because $\phi_{\text{old}}$ is a prefix of
 $\phi_{\text{new}}$, no logit changes.
@@ -55,7 +59,7 @@ With no old classes (first experience) $\Delta W=\Delta W_{\text{SGD}}$. $N$ is 
 experience from the rate vector actually used; a rate mask applied after projecting breaks the
 constraint. Batches are class-balanced over current and replay data.
 
-\begin{prop}[\texttt{strategy\_b}]\label{p:sb}
+\begin{prop}[exact step]\label{p:sb}
 Let $\beta=0$ and $\mathrm{tol}\to0$ so that $P$ is the orthogonal projector onto $\nul(A)$. Then
 \begin{enumerate}[label=(\alph*)]
 \item $R\,\Delta W=0$. The logits of every reference input are unchanged on all seen columns after
@@ -67,7 +71,7 @@ $\langle G,Z\rangle+\tfrac12\sum_{j\in S}\|Z_{j}\|^2/d_j$ over $Z$ with $Z_{S^c}
 \item The columns of $\Delta W$ lie in $\operatorname{range}(D^{1/2}N)$, of dimension
 $r=\rank(D^{1/2}N)=|S|-\rank(R_S)$, where $R_S$ keeps the columns of $R$ in $S$. $r$ never decreases when $S$
 grows, and $r=0$ (no learning) when $\rank(R_S)=|S|$.
-\item The step equals that of \texttt{polynomial\_cl}'s \texttt{strategy\_b} computed for the controlled rate $d$.
+\item The step equals that of the earlier \texttt{polynomial\_cl} exact null-space step computed for the controlled rate $d$.
 \end{enumerate}
 \end{prop}
 \begin{proof}
@@ -81,7 +85,7 @@ $A_S=R_SD_S^{1/2}$, $P$ is block diagonal and $D^{1/2}Pu$ is supported on $S$.
 Adding a feature to $S$ adds one to $|S|$ and at most one to $\rank R_S$.
 (f) \texttt{fit\_task} applies $\sqrt{s}\,NN^\top\!\sqrt{s}\,g$ scaled by the base rate, with $s=d/\text{base}$ and $N$
 spanning $\nul(R\sqrt{s})=\nul A$. The two steps agree; numerically they differ by $2\!\times\!10^{-8}$
-(the PR works in float32), checked by \texttt{tests/test\_pr\_parity.py} when \texttt{polynomial\_cl} is importable (it is skipped otherwise).
+(the PR works in float32). This was checked by a parity test that was removed from this repository together with the experiment code (Git tag \texttt{legacy-m7-benchmark}); it is currently not tested here.
 Both cut singular values at the same threshold $10^{-10}\max(\sigma_1,1)$ (the PR's convention, now also used by \texttt{null\_basis}), so they select the same space unless a singular value lies near it. In the uncontrolled benchmark runs the smallest $\sigma_1$ over all splits and experiences is $4.59>1$, so there the threshold equals $\mathrm{tol}\,\sigma_1$ and the reported numbers do not depend on the $\max(\cdot,1)$.
 \end{proof}
 
@@ -157,14 +161,14 @@ $R\Delta W=0$ is about reference inputs only.
 Each function's docstring states the same equation as this document.
 \begin{center}\small\begin{tabular}{@{}lll@{}}\toprule
 Definition & Function & Module (\texttt{stable\_cl/})\\\midrule
-features $\phi$, degree scaling & \texttt{poly\_features} & \texttt{features.py}\\
-expansion $W\mapsto[W;0]$ & \texttt{expand} & \texttt{features.py}\\
 $d_j=\eta_{\deg(j)}m_{\deg(j)}$ & \texttt{diagonal\_rates} & \texttt{optimization.py}\\
 $N$, null space of $A=RD^{1/2}$ & \texttt{null\_basis} & \texttt{optimization.py}\\
-$D^{1/2}[P+\beta(I-P)]D^{1/2}G$ (unsigned; $\Delta W$ is minus this) & \texttt{null\_step} & \texttt{optimization.py}\\
+$D^{1/2}[P+\beta(I-P)]D^{1/2}G$ (unsigned; $\Delta W$ is minus this) & \texttt{relaxed\_step} & \texttt{optimization.py}\\
+$DG$ (unsigned; ordinary step) & \texttt{ordinary\_step} & \texttt{optimization.py}\\
+$\|AN\|_2$ (achieved, the $\tau$ of the residual bound) & \texttt{spectral\_bound} & \texttt{optimization.py}\\
 $r=\rank(D^{1/2}N)$ & \texttt{free\_dim} & \texttt{optimization.py}\\
 \bottomrule\end{tabular}\end{center}
-Training, experiment and benchmark code is not part of this repository (see \S\ref{s:emp}).
+Feature maps, expansion, training, experiment and benchmark code are not part of this repository (see \S\ref{s:emp}).
 
 \section{Reproduce}
 \begin{verbatim}
