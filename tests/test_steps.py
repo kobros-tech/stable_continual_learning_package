@@ -121,3 +121,37 @@ def test_spectral_bound_rejects_invalid_inputs(problem):
     for args in cases:
         with pytest.raises(ValueError):
             spectral_bound(*args)
+
+
+@pytest.mark.parametrize(
+    "dtype, value",
+    [(np.int64, 2**40), (np.int32, 2**20), (np.uint8, 200), (np.int8, 100)],
+)
+def test_integer_inputs_are_multiplied_in_float64_and_cannot_overflow(dtype, value):
+    G = np.full((3, 2), value, dtype=dtype)
+    d = np.full(3, value, dtype=dtype)
+    expected = float(value) ** 2  # beyond the range of `dtype`: integer maths wraps
+    out = ordinary_step(G, d)
+    assert out.dtype == np.float64 and out.shape == G.shape
+    assert np.array_equal(out, np.full((3, 2), expected))
+
+
+def test_integer_inputs_agree_with_their_float_versions():
+    rng = np.random.default_rng(5)
+    G = rng.integers(-1000, 1000, size=(6, 3))
+    d = rng.integers(0, 50, size=6)
+    assert np.array_equal(
+        ordinary_step(G, d), d.astype(float)[:, None] * G.astype(float)
+    )
+
+
+@pytest.mark.parametrize("bad", [np.ones((3, 2), dtype=bool), np.ones((3, 2)) + 0j])
+def test_ordinary_step_rejects_boolean_and_complex_gradients(bad):
+    with pytest.raises(TypeError):
+        ordinary_step(bad, np.ones(3))
+
+
+@pytest.mark.parametrize("bad", [np.ones(3, dtype=bool), np.ones(3) + 0j])
+def test_ordinary_step_rejects_boolean_and_complex_rates(bad):
+    with pytest.raises(TypeError):
+        ordinary_step(np.ones((3, 2)), bad)

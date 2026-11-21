@@ -257,6 +257,9 @@ def ordinary_step(G, d):
     The caller *subtracts* the returned array from the weights.  Up to round-off this equals
     :func:`relaxed_step` with ``beta=1`` for every basis ``N``.
 
+    Both inputs are converted to ``float64`` before they are multiplied, so integer arrays cannot
+    overflow or wrap around.
+
     Parameters
     ----------
     G : ndarray, shape (p, K)
@@ -266,17 +269,20 @@ def ordinary_step(G, d):
 
     Returns
     -------
-    ndarray, shape (p, K)
+    ndarray of float64, shape (p, K)
         The step :math:`S`.
 
     Raises
     ------
+    TypeError
+        If ``G`` or ``d`` contains booleans, complex numbers or non-numbers.
     ValueError
         If ``G`` is not a finite 2-D array, ``d`` is not a finite non-negative vector of length
         ``G.shape[0]``.
     """
+    G, d = _real(G, "G"), _real(d, "d")
     _check_matrix_and_rates(G, d, "G")
-    return np.asarray(d)[:, None] * np.asarray(G)
+    return d[:, None] * G
 
 
 def relaxed_step(G, N, d, beta=0.0):
