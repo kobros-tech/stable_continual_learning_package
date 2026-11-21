@@ -189,15 +189,22 @@ def null_basis(R, d, tol=1e-10):
 
     .. math::
 
-        k = \#\{\, i : \sigma_i > \text{tol}\cdot\max(\sigma_1, 1) \,\}.
+        k = \#\{\, i : \sigma_i > \text{tol}\cdot\sigma_1 \,\}.
 
     The returned :math:`N` has the right-singular vectors :math:`v_i`, :math:`i > k`, as columns
     (all of :math:`\operatorname{null}(A)` is included, because the full SVD is used).  The
-    threshold :math:`\text{tol}\cdot\max(\sigma_1, 1)` is inherited from the earlier
-    ``polynomial_cl`` implementation; it is not invariant under a rescaling of ``d`` when
-    :math:`\sigma_1 < 1`.  With ``tol`` around ``1e-10`` the result is :math:`\operatorname{null}(A)` up to round-off
-    (*exact*); with ``tol > 0`` large it additionally keeps directions that :math:`A` only weakly
-    sees (*relaxed*), and then :math:`\|A N\|_2 \le \text{tol}\cdot\max(\sigma_1, 1)`.
+    threshold :math:`\tau = \text{tol}\cdot\sigma_1` is *relative*: it is unchanged when ``d``
+    or ``R`` is multiplied by a positive constant, so the projector :math:`P = N N^\top` depends
+    on the shape of the spectrum and not on the units of the rates or of the features.  The
+    earlier rule :math:`\text{tol}\cdot\max(\sigma_1, 1)` coincides with this one when
+    :math:`\sigma_1 \ge 1`; when :math:`\sigma_1 < 1` it is larger, so its null space contains
+    the present one, and for very small rates it would treat the whole space as null.
+
+    With ``tol`` around ``1e-10`` the result is :math:`\operatorname{null}(A)` up to round-off
+    (*exact*); with ``tol`` larger it additionally keeps directions that :math:`A` only weakly
+    sees (*relaxed*), and then :math:`\|A N\|_2 \le \text{tol}\cdot\sigma_1`.  ``tol`` must lie
+    in :math:`[0, 1)`: at ``tol = 1`` no singular value exceeds the threshold and every direction
+    would count as null, whatever ``R`` is.
 
     ``tol = 0`` is the strictest setting: every singular value that is not *exactly* zero counts
     as non-null, so round-off-level singular values of a rank-deficient :math:`A` are kept out
@@ -207,9 +214,9 @@ def null_basis(R, d, tol=1e-10):
     individual columns of :math:`N` are then not unique, but :math:`P = N N^\top` is.
 
     Edge cases: with no reference rows (``R.shape[0] == 0``) the whole space is free and the
-    identity is returned; if :math:`A` has full column rank the result has zero columns; if
-    every rate is zero then :math:`A = 0`, all singular values vanish and a full orthonormal
-    basis (:math:`P = I`) is returned.
+    identity is returned; if :math:`\sigma_1 = 0` (``R`` is zero, or every rate is zero, so
+    :math:`A = 0`) the threshold is zero, nothing is constrained and the identity
+    (:math:`P = I`) is returned; if :math:`A` has full column rank the result has zero columns.
 
     Parameters
     ----------
@@ -218,7 +225,7 @@ def null_basis(R, d, tol=1e-10):
     d : ndarray, shape (p,)
         Diagonal rates from :func:`diagonal_rates`, :math:`d \ge 0`.
     tol : float, default 1e-10
-        Relative spectral tolerance.
+        Relative spectral tolerance, a real number in ``[0, 1)``.
 
     Returns
     -------
@@ -228,14 +235,15 @@ def null_basis(R, d, tol=1e-10):
     Raises
     ------
     ValueError
-        If ``tol`` is negative, NaN or infinite; if ``R`` is not a finite 2-D array with at
-        least one column; or if ``d`` is not a finite non-negative vector of length ``R.shape[1]``.
+        If ``tol`` is not a finite scalar in ``[0, 1)``; if ``R`` is not a finite 2-D array with
+        at least one column; or if ``d`` is not a finite non-negative vector of length
+        ``R.shape[1]``.
     TypeError
         If ``tol`` is not a real number.
     """
     tol = _real(tol, "tol")
-    if tol.ndim != 0 or not np.isfinite(tol) or tol < 0:
-        raise ValueError("tol must be a finite non-negative scalar")
+    if tol.ndim != 0 or not np.isfinite(tol) or not 0.0 <= tol < 1.0:
+        raise ValueError("tol must be a finite scalar in [0, 1)")
     tol = float(tol)
     R, d = np.asarray(R), np.asarray(d)
     if np.ndim(R) == 2 and R.shape[1] < 1:
@@ -244,7 +252,10 @@ def null_basis(R, d, tol=1e-10):
     if R.shape[0] == 0:
         return np.eye(R.shape[1])
     _, s, vt = np.linalg.svd(R * np.sqrt(d), full_matrices=True)
-    return vt[int((s > tol * max(float(s[0]), 1.0)).sum()) :].T
+    sigma1 = float(s[0])
+    if sigma1 == 0.0:
+        return np.eye(R.shape[1])
+    return vt[int((s > tol * sigma1).sum()) :].T
 
 
 def ordinary_step(G, d):

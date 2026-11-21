@@ -56,7 +56,7 @@ results are separate evidence.
 | A2  | `A N = 0` for `A = R D^{1/2}` (exact null basis)                    | M3                | `test_null_basis_is_orthonormal_and_annihilated_by_A` (residual below `1e-9`, so the guarantee holds up to that tolerance, not exactly)                          |
 | A3  | `N^T N = I`                                                         | M4                | same test                                                                                                                                                       |
 | A4  | `‖A N‖₂ ≤ τ` for the relaxed basis, stated in Lean as `‖(A N) X‖_F ≤ τ ‖X‖_F` for all `X` | M4b           | `test_a4_spectral_norm_of_A_N_is_at_most_tau` (direct: `‖A N‖₂ ≤ τ`, 4 tolerances x 48 cases), `test_cutoff_consistency_links_the_svd_threshold_to_a4`, and indirectly `test_relaxed_logit_change_respects_the_spectral_bound` |
-| A5  | `N` spans all of `null(A)`: `N N^T V = V` whenever `A V = 0` (the `tol → 0` hypothesis of Prop 1) | M5           | `test_exact_null_basis_spans_the_whole_null_space`, `test_exact_null_basis_is_complete_for_rank_deficient_references`, `test_a5_projector_fixes_every_vector_of_an_independently_built_null_space` (N Nᵀ V = V for V from a QR-built null space), `test_a5_holds_for_nearly_degenerate_singular_values` (dimension equals `p - rank A`, with the rank taken under `null_basis`'s own threshold `σ > tol·max(σ₁,1)`; given A2 and orthonormal columns (A3) this is equivalent to `N` spanning `null(A)`, which is the form `hcomp` states in Lean) |
+| A5  | `N` spans all of `null(A)`: `N N^T V = V` whenever `A V = 0` (the `tol → 0` hypothesis of Prop 1) | M5           | `test_exact_null_basis_spans_the_whole_null_space`, `test_exact_null_basis_is_complete_for_rank_deficient_references`, `test_a5_projector_fixes_every_vector_of_an_independently_built_null_space` (N Nᵀ V = V for V from a QR-built null space), `test_a5_holds_for_nearly_degenerate_singular_values` (dimension equals `p - rank A`, with the rank taken under `null_basis`'s own threshold `σ > tol·σ₁`; given A2 and orthonormal columns (A3) this is equivalent to `N` spanning `null(A)`, which is the form `hcomp` states in Lean) |
 
 ## Claims
 
@@ -81,11 +81,21 @@ results are separate evidence.
 - The relaxed bound subtracts `β A u` (`= β R D G`). `‖RΔW‖` alone is **not** bounded by
   `(1-β) τ ‖u‖`: on 300 random cases it failed 258 times. The existing test already uses the
   correct quantity.
-- `math.tex` Prop 2 and `test_relaxed_logit_change_respects_the_spectral_bound` both use
-  `τ = tol · max(σ₁, 1)`. The tests scale `R` so that `σ₁` is far below 1 (about 0.1) and far above
-  1 (about 10 to 3500), and `test_relaxed_residual_bound_with_sigma1_around_one` places `σ₁` at
-  0.5, 1 and 2, so both sides of the `max(·, 1)` branch point are exercised, not only
-  `σ₁ ≥ 1`.
+- Tolerance rule (S3). `null_basis` keeps the right singular vectors with `σ ≤ τ`, where
+  `τ = tol · σ₁` and `tol ∈ [0, 1)`; `math.tex` Prop 2 and the M6 tests use the same `τ`. The rule
+  is relative: `P` does not change when `d` or `R` is multiplied by a positive constant
+  (`test_projector_is_invariant_under_a_positive_rescaling_of_the_rates` and `…_of_the_features`).
+  The previous rule `tol · max(σ₁, 1)` is identical for `σ₁ ≥ 1`
+  (`test_projector_equals_the_legacy_rule_when_sigma1_is_at_least_one`) and, for `σ₁ < 1`, has a
+  null space that contains the new one
+  (`test_legacy_null_space_contains_the_new_one_when_sigma1_is_below_one`). With the previous rule a
+  tiny rate such as `d = 10⁻²²` made `σ₁ < tol` and the whole space count as null, so the exact step
+  did not protect the reference at all; `test_tiny_rates_are_not_treated_as_a_free_space` pins that
+  hazard as rejected. `‖A N‖₂ ≤ tol · σ₁` is checked with an explicit relative slack of
+  `1e-12 · σ₁` (`test_spectral_norm_of_A_N_is_at_most_tol_times_sigma1_at_every_scale`, and the A4
+  test). The M6 scale grid puts `σ₁` from about 0.07 to about 3500, and
+  `test_relaxed_residual_bound_with_sigma1_around_one` places it at 0.5, 1 and 2. The Lean files
+  are unchanged: they take `τ` as a hypothesis and never see the threshold.
 - Exact reference preservation (M3) is stated for the exact null basis. `null_basis` is a
   numerical SVD with a tolerance, so for the implementation the guarantee is "up to A2's
   residual", which is a numerical statement, not a theorem.
@@ -106,7 +116,7 @@ results are separate evidence.
   optimality (M5) additionally needs that `N` is not a proper subspace of `null(A)`; with a
   smaller basis the step is feasible but not the minimiser.
   The completeness tests count rank with the same threshold as `null_basis`
-  (`σ > tol·max(σ₁,1)`), not `np.linalg.matrix_rank`'s default `σ₁·max(shape)·eps`; the two
+  (`σ > tol·σ₁`), not `np.linalg.matrix_rank`'s default `σ₁·max(shape)·eps`; the two
   can disagree on near-null singular values. Numerical completeness is a floating-point check
   and is not implied by any Lean theorem.
 - Uniqueness in M5 is over the feasible set `{Z : Z_j = 0 for d_j = 0, R Z = 0}`, not over all

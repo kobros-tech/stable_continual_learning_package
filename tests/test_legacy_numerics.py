@@ -4,9 +4,14 @@
 """The S1-head numerics are unchanged by the API change.
 
 `tests/golden/legacy_numerics.json` was produced by the implementation as it stood at the end of S1
-(functions `diagonal_rates`, `null_basis`, `null_step`, `free_dim`; threshold `tol * max(sigma_1, 1)`).
+(functions `diagonal_rates`, `null_basis`, `null_step`, `free_dim`; legacy threshold `tol * max(sigma_1, 1)`).
 Inputs are stored in the file. `N` itself is sign- and rotation-ambiguous, so the projector `N N^T`
-is compared. The threshold rule is what a later, separate PR changes; this file pins it until then.
+is compared.
+
+S3 changed the threshold to `tol * sigma_1`. The stored values are *not* regenerated: the two rules
+coincide when `sigma_1 >= 1`, and in the one stored case with `sigma_1 < 1` (`tol = 1e-10`, a
+rank-4 `R`) both rules count the same four constraints, so every case still holds unchanged.
+Where the rules do differ is pinned by `tests/test_tolerance.py`.
 """
 
 import json

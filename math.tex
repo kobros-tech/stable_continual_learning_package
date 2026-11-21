@@ -49,8 +49,13 @@ $\phi_{\text{new}}$, no logit changes.
 \section{Updates}
 Let $R\in\R^{m_R\times p}$ hold the features of the first $n_{\text{ref}}$ stored examples of every old
 class, $A=RD^{1/2}$ with singular values $\sigma_1\ge\sigma_2\ge\dots$ and SVD $A=U\Sigma V^\top$, and put
-$u=D^{1/2}G$. Let $N$ have orthonormal columns $v_i$, $i>k$, where $k=\#\{i:\sigma_i>\mathrm{tol}\cdot\max(\sigma_1,1)\}$
-(including all of $\nul A$), and $P=NN^\top$. Then
+$u=D^{1/2}G$. Let $N$ have orthonormal columns $v_i$, $i>k$, where $k=\#\{i:\sigma_i>\mathrm{tol}\cdot\sigma_1\}$
+(including all of $\nul A$), $\mathrm{tol}\in[0,1)$, and $P=NN^\top$. If $\sigma_1=0$ ($R$ has no rows, $R=0$ or
+$d=0$) then $A=0$, nothing is constrained and $N=I$. The threshold $\tau=\mathrm{tol}\cdot\sigma_1$ is relative: $P$ is
+unchanged when $d$ or $R$ is multiplied by a positive constant, so it does not depend on the units of the rates
+or the features. The earlier rule $\mathrm{tol}\cdot\max(\sigma_1,1)$ is the same when $\sigma_1\ge1$; when
+$\sigma_1<1$ it is larger, so its null space contains the present one, and for very small rates (for example
+$d=10^{-22}$ with $\mathrm{tol}=10^{-10}$) it counted the whole space as null. Then
 \[
 \Delta W_{\text{SGD}}=-DG,\qquad
 \boxed{\Delta W=-D^{1/2}\big[P+\beta(I-P)\big]D^{1/2}G,\quad 0\le\beta\le1.}
@@ -86,11 +91,11 @@ Adding a feature to $S$ adds one to $|S|$ and at most one to $\rank R_S$.
 (f) \texttt{fit\_task} applies $\sqrt{s}\,NN^\top\!\sqrt{s}\,g$ scaled by the base rate, with $s=d/\text{base}$ and $N$
 spanning $\nul(R\sqrt{s})=\nul A$. The two steps agree; numerically they differ by $2\!\times\!10^{-8}$
 (the PR works in float32). This was checked by a parity test that was removed from this repository together with the experiment code (Git tag \texttt{legacy-m7-benchmark}); it is currently not tested here.
-Both cut singular values at the same threshold $10^{-10}\max(\sigma_1,1)$ (the PR's convention, now also used by \texttt{null\_basis}), so they select the same space unless a singular value lies near it. In the uncontrolled benchmark runs the smallest $\sigma_1$ over all splits and experiences is $4.59>1$, so there the threshold equals $\mathrm{tol}\,\sigma_1$ and the reported numbers do not depend on the $\max(\cdot,1)$.
+The PR cut singular values at $10^{-10}\max(\sigma_1,1)$; \texttt{null\_basis} now cuts at $10^{-10}\sigma_1$. The two thresholds are equal when $\sigma_1\ge1$, so then the steps select the same space unless a singular value lies near the threshold; when $\sigma_1<1$ the PR's null space contains the present one. In the uncontrolled benchmark runs the smallest $\sigma_1$ over all splits and experiences is $4.59>1$, so the reported numbers do not depend on this difference.
 \end{proof}
 
 \begin{prop}[relaxation]\label{p:rel}
-For any $\beta,\mathrm{tol}$, with $\tau=\mathrm{tol}\cdot\max(\sigma_1,1)$:
+For any $\beta$ and $\mathrm{tol}\in[0,1)$, with $\tau=\mathrm{tol}\cdot\sigma_1$:
 \begin{enumerate}[label=(\alph*)]
 \item $\beta=1$ gives $\Delta W=-DG$ for every $\mathrm{tol}$ (ordinary rate-weighted SGD).
 \item $\langle G,\Delta W\rangle=-\big(\beta\|u\|_F^2+(1-\beta)\|Pu\|_F^2\big)\le0$, so every step is non-ascent; it is strict descent when $\beta>0$ and $u\neq0$.
@@ -100,7 +105,7 @@ their SGD change, up to a term proportional to the spectral tolerance. For $\mat
 \end{prop}
 \begin{proof}
 (a),(b) $P+\beta(I-P)=\beta I+(1-\beta)P\succeq0$. (c) $R\Delta W=-\beta RD^{1/2}u-(1-\beta)AN N^\top u$,
-$RD^{1/2}u=RDG$, and $\|AN\|_2=\sigma_{k+1}\le\tau$.
+$RD^{1/2}u=RDG$, and $\|AN\|_2=\sigma_{k+1}\le\tau$ by the definition of $k$ (if $\sigma_1=0$ then $A=0$ and both sides vanish).
 \end{proof}
 
 \begin{rem}

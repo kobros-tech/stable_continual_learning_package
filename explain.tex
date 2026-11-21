@@ -528,9 +528,9 @@ The package forms $A=RD^{1/2}$ and finds an orthonormal basis
 \]
 It uses the singular value decomposition $RD^{1/2}=U\Sigma V^\top$. The right singular vectors whose singular values satisfy
 \[
-\sigma_i\le\text{tol}\cdot\max(\sigma_{\max},1)
+\sigma_i\le\text{tol}\cdot\sigma_{\max}
 \]
-are treated as the null space. (The $\max(\sigma_{\max},1)$ is the \code{polynomial\_cl} convention; in the uncontrolled benchmark runs the smallest $\sigma_{\max}$ over splits and experiences is $4.59$, so there it equals $\sigma_{\max}$.) The default is $\text{tol}=10^{-10}$, which gives the exact null space up to rounding; the relaxed variant uses $\text{tol}=0.03$. For $\text{tol}=0.03$ this is a \textbf{numerical} null space, not the exact one, and as shown in \S\ref{sec:guarantee} the difference is large in practice. If there are no reference examples, $N=I$.
+are treated as the null space, with $\text{tol}\in[0,1)$; the threshold is relative, so it does not change when the rates or features are rescaled. (The earlier \code{polynomial\_cl} code used $\text{tol}\cdot\max(\sigma_{\max},1)$, which is the same when $\sigma_{\max}\ge1$; in the uncontrolled benchmark runs the smallest $\sigma_{\max}$ over splits and experiences is $4.59$, so the reported numbers are unaffected.) The default is $\text{tol}=10^{-10}$, which gives the exact null space up to rounding; the relaxed variant uses $\text{tol}=0.03$. For $\text{tol}=0.03$ this is a \textbf{numerical} null space, not the exact one, and as shown in \S\ref{sec:guarantee} the difference is large in practice. If there are no reference examples, $N=I$.
 
 \subsection{Why use SVD?}
 
@@ -634,7 +634,7 @@ Write $u=D^{1/2}G$, $P=NN^\top$, $S=\{j:d_j>0\}$, and let $R_S$ keep the columns
 \item $\langle G,\Delta W\rangle=-\|Pu\|_F^2\le0$, and the step stalls ($\Delta W=0$) exactly when $Pu=0$.
 \item Only $r=\operatorname{rank}(D^{1/2}N)=|S|-\operatorname{rank}(R_S)$ directions are free to move (\code{free\_dim}); $r=0$ means no learning at all.
 \end{enumerate}
-For the \emph{relaxation} (any $\beta,\text{tol}$, with $\tau=\text{tol}\cdot\max(\sigma_{\max},1)$): $\beta=1$ is ordinary SGD; $\langle G,\Delta W\rangle=-\bigl(\beta\|u\|_F^2+(1-\beta)\|Pu\|_F^2\bigr)\le0$, so every step is non-ascent; and
+For the \emph{relaxation} (any $\beta,\text{tol}$, with $\tau=\text{tol}\cdot\sigma_{\max}$): $\beta=1$ is ordinary SGD; $\langle G,\Delta W\rangle=-\bigl(\beta\|u\|_F^2+(1-\beta)\|Pu\|_F^2\bigr)\le0$, so every step is non-ascent; and
 \[
 \bigl\|R\,\Delta W+\beta\,RDG\bigr\|_F\le(1-\beta)\,\tau\,\|D^{1/2}G\|_F,
 \]
@@ -902,7 +902,7 @@ The package retains two update families: ordinary SGD and the rate-weighted null
 \item \textbf{Diagonal-rate conventions.} $m=\mathbf 1$ is the uncontrolled rate, $m_g=0$ freezes a group, an all-zero rate is a no-op, and the rate map is prefix-stable.
 \item \textbf{Exact null-space step.} For $\beta=0$ and exact null space: $R\Delta W=0$, frozen rows stay fixed, the step is the constrained minimiser of Proposition~1(c) of \code{math.tex}, and it is a descent step.
 \item \textbf{Ordinary-SGD equivalence.} At $\beta=1$: $\Delta W=-DG$ for every tolerance.
-\item \textbf{Relaxation bound.} For any $\beta,\text{tol}$ the reference logits move by $\beta$ times their SGD change up to $(1-\beta)\,\text{tol}\cdot\max(\sigma_{\max},1)\,\|D^{1/2}G\|_F$, and every step is non-ascent.
+\item \textbf{Relaxation bound.} For any $\beta,\text{tol}$ the reference logits move by $\beta$ times their SGD change up to $(1-\beta)\,\text{tol}\cdot\sigma_{\max}\,\|D^{1/2}G\|_F$, and every step is non-ascent.
 \item \textbf{Compatibility.} The model can expand, rebuild the null-space basis, and continue learning the new coefficients.
 \end{enumerate}
 These are properties of the implementation and its mathematical construction. The pytest suite (\code{tests/}) tests the polynomial feature count, ordering and prefix property, expansion invariance, the diagonal-rate conventions, the exact step ($R\Delta W=0$, frozen rows, an independent pseudo-inverse form, the constrained-minimiser property, the free dimension), the endpoint $\beta=1$, the blend identity and the relaxation bound on random data, the cross-entropy gradient inside \code{train\_task} against finite differences, whole-experience reference-logit invariance on toy data, that an all-ones control reproduces the uncontrolled run and an all-zero control is a no-op, the metric definitions, that evaluation rows do not influence preprocessing, the benchmark statistics and selection rule, and (when \code{polynomial\_cl} is importable) one step against the PR. The exact-step properties use an \emph{exact} null space ($\text{tol}\approx10^{-10}$); they do not carry over to the relaxed $\text{tol}=0.03$ except through the bound above. In the environment used for Appendix~\ref{app:verify} \code{polynomial\_cl} was not installed, so the PR-parity test was skipped.
