@@ -64,6 +64,15 @@
 \begin{document}
 \maketitle
 
+\begin{reviewbox}[title={Status of this document}]
+This document was written for the package \emph{before} its training, experiment and benchmark code was
+removed from the repository (Git tag \code{legacy-m7-benchmark} preserves that code). The sections on the
+dataset, the classifier, ordinary SGD, replay, the demonstration, the benchmark and the verification
+appendix describe removed code and \emph{historical} results. Those results are not regenerated here and
+are not evidence for any later API, experiment or paper. The maintained specification is \code{math.tex};
+the maintained code is \code{stable\_cl/optimization.py} and \code{stable\_cl/features.py}.
+\end{reviewbox}
+
 \begin{abstract}
 \noindent This document explains the \code{stable\_cl} package (repository \code{stable\_continual\_learning\_package}): a small NumPy implementation of a polynomial classifier that learns the ten handwritten-digit classes in five sequential experiences, using progressive feature expansion, replay memory, per-degree diagonal learning rates with degree control, and a rate-weighted null-space update. That update is the \code{strategy\_b} step of the \code{polynomial\_cl} \code{diagonal\_control} PR, together with two named relaxations of it. The document keeps the structure of the previous edition and is updated to the current code. Where earlier descriptions disagreed with the code or the data, the text here has been corrected; those corrections and the changes for this code version are listed in Appendix~\ref{app:corrections}, and Appendix~\ref{app:verify} reports numbers obtained by actually running the package.
 \end{abstract}
@@ -760,7 +769,7 @@ A model with low forgetting but very poor newest-experience accuracy is not nece
 The \code{demo()} function compares them with: data split seed 0; training seeds 3, 4, 5, 6, 7; 100 replay examples per class; three epochs per experience; learning rate 3 for every degree and no degree control.
 
 \begin{verifybox}
-Running \code{python -m stable\_cl} reproduces:
+Running \code{python -m stable\_cl} (the demonstration, now removed) reproduced:
 \begin{center}\small
 \begin{tabular}{@{}lccccc@{}}
 \toprule
@@ -775,7 +784,9 @@ Relaxed ($\text{tol}=.03$, $\beta=.3$, $n_{\text{ref}}=50$) & 0.831 & 0.033 & 0.
 The exact step has the lowest forgetting, but it pays for it with plasticity (0.790 vs.\ 0.840) and newest-experience accuracy (0.391 vs.\ 0.653): its low forgetting is partly a failure to learn. The relaxed step keeps plasticity essentially unchanged (0.838) while forgetting falls and old-class accuracy rises. This is one data split with five training seeds, so it is a demonstration, not a significance test.
 \end{verifybox}
 
-\section{What does \texttt{benchmark.py} investigate?}\label{sec:benchmark}
+\section{What did the removed \texttt{benchmark.py} investigate?}\label{sec:benchmark}
+
+\emph{This section describes the removed benchmark. Its results are historical (Git tag \code{legacy-m7-benchmark}) and are not regenerated.}
 
 The benchmark asks the harder question: if a null-space update forgets less, is that because its geometric update is useful, or simply because it effectively \emph{reduces learning}? It therefore compares against ordinary SGD with learning-rate multipliers $1.0,\,0.75,\,0.5,\,0.35,\,0.25$, and it reports the exact \code{strategy\_b} step next to the relaxation, so the cost of the exact step is visible.
 
@@ -845,9 +856,7 @@ File & Responsibility\\
 \midrule
 \code{stable\_cl/features.py} & Polynomial feature map and zero-initialized expansion.\\
 \code{stable\_cl/optimization.py} & Diagonal degree-wise rates, the null-space basis, the (relaxed) null-space step and the free dimension.\\
-\code{stable\_cl/training.py} & Softmax and the training of one experience on current data plus replay.\\
-\code{stable\_cl/experiment.py} & Data preparation, the five class-incremental experiences, the metrics and the demo.\\
-\code{benchmark.py} & Validation-based selection of the relaxation, comparisons against ordinary SGD, smaller learning rates and the exact step, and the degree-control study.\\
+\code{stable\_cl/training.py}, \code{stable\_cl/experiment.py}, \code{benchmark.py} & Removed from the repository (Git tag \code{legacy-m7-benchmark}): training of one experience, data preparation and metrics, and the validation-based benchmark. Described in this document for the historical results only.\\
 \code{tests/} & The pytest suite that checks the mathematical properties of every function.\\
 \code{README.md} & Short description, run and build instructions.\\
 \code{math.tex} & LaTeX source of the mathematical specification: definitions, propositions, proofs, results.\\
@@ -869,19 +878,14 @@ Function & Module & Responsibility\\
 \code{null\_basis()} & \code{optimization} & Computes the numerical null-space basis of $RD^{1/2}$ by SVD.\\
 \code{null\_step()} & \code{optimization} & Computes the rate-weighted null-space step (returned unsigned; $\Delta W$ is its negative).\\
 \code{free\_dim()} & \code{optimization} & Counts the feature directions that can still move, $\operatorname{rank}(D^{1/2}N)$.\\
-\code{softmax()} & \code{training} & Converts logits into probabilities.\\
-\code{train\_task()} & \code{training} & Trains one experience on current data plus replay, with \code{strategy}, \code{control}, \code{n\_ref}, \code{tol}, \code{beta}.\\
-\code{run()} & \code{experiment} & Runs all five experiences and computes the metrics.\\
-\code{load\_digits\_features()} & \code{experiment} & Loads, splits, standardises (fitting-set statistics), projects and transforms the digits dataset.\\
-\code{stratified\_cut()} & \code{experiment} & Splits indices so that every class keeps $\lfloor f\,n_c\rfloor$ examples in the first part (used for the validation cut).\\
-\code{demo()} & \code{experiment} & Runs the ordinary / exact / relaxed demonstration (\code{CONFIGS}).\\
+\code{softmax()}, \code{train\_task()}, \code{run()}, \code{load\_digits\_features()}, \code{stratified\_cut()}, \code{demo()} & \code{training}, \code{experiment} & Removed from the repository (Git tag \code{legacy-m7-benchmark}); described in this document for the historical results only.\\
 \bottomrule
 \end{tabular}
 \end{center}
 
 Every function carries a docstring stating its purpose, argument shapes, return value and, where it implements a mathematical operation, the same equation as in this document and in \code{math.tex}.
 
-The benchmark calls \code{run()} rather than implementing a second training algorithm, so the demonstration and the benchmark exercise the same learning system. This is good design.
+The removed benchmark called \code{run()} rather than implementing a second training algorithm, so the demonstration and the benchmark exercised the same learning system.
 
 \section{What has deliberately been removed?}
 
@@ -1005,6 +1009,8 @@ This version reorganises the code and corrects the validation protocol; the lear
 \end{enumerate}
 
 \section{Independent verification}\label{app:verify}
+
+\emph{This appendix records the verification of the code as it was before the removal (Git tag \code{legacy-m7-benchmark}); it cannot be repeated from this repository.}
 
 All numbers below were obtained by running the package unmodified (NumPy 2.5.4, SciPy 1.18.1, scikit-learn 1.9.1).
 

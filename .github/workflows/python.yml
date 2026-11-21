@@ -67,9 +67,8 @@ jobs:
       # `pythonpath = ["."]` in [tool.pytest.ini_options] makes `stable_cl` importable.
       # Keep this list in sync with `dependencies` and `[project.optional-dependencies].test`.
       - name: Install dependencies
-        run: python -m pip install numpy scipy scikit-learn pytest
+        run: python -m pip install numpy pytest
 
-      # -ra prints the reason for every skip. tests/test_pr_parity.py is skipped unless the
-      # external `polynomial_cl` package is importable, which it is not here.
+      # -ra prints the reason for every skip.
       - name: Run tests
         run: python -m pytest -ra -q
